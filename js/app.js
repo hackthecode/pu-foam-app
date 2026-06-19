@@ -14,6 +14,13 @@ function fmtInt(n) {
   if (n == null || isNaN(n)) return "—";
   return Math.round(n).toLocaleString("bg-BG");
 }
+// Адаптивно форматиране на килограми: по-големите стойности с по-малко
+// десетични знаци, за да не стават числата прекалено широки на тесен екран.
+function fmtKg(n) {
+  if (n == null || isNaN(n)) return "—";
+  const dec = n >= 100 ? 1 : n >= 10 ? 2 : 3;
+  return n.toLocaleString("bg-BG", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
 // Чете числова стойност от поле; връща NaN ако е празно/невалидно
 function valNum(id) {
   return parseNum($(id).value);
@@ -133,9 +140,9 @@ function recalcCalc() {
     // Реалните обороти за машината = грамове на пуск / коефициент (гр на 1 RPM)
     const rpm = cal != null && cal > 0 ? (c.kg * 1000) / cal : null;
     const rpmStr = rpm != null ? `<b style="color:var(--blue)">${fmtInt(rpm)}</b>` : "—";
-    html += `<tr><td class="name">${c.name}</td><td class="num" style="color:var(--text-dim)">${calStr}</td><td class="num">${rpmStr}</td><td class="num val">${fmt(c.kg)}</td><td class="num val">${fmt(c.kg * puls)}</td></tr>`;
+    html += `<tr><td class="name">${c.name}</td><td class="num" style="color:var(--text-dim)">${calStr}</td><td class="num">${rpmStr}</td><td class="num val">${fmtKg(c.kg)}</td><td class="num val">${fmtKg(c.kg * puls)}</td></tr>`;
   });
-  html += `<tr class="total"><td>Общо (кг)</td><td class="num"></td><td class="num"></td><td class="num val">${fmt(sum1)}</td><td class="num val">${fmt(sumAll)}</td></tr>`;
+  html += `<tr class="total"><td>Общо (кг)</td><td class="num"></td><td class="num"></td><td class="num val">${fmtKg(sum1)}</td><td class="num val">${fmtKg(sumAll)}</td></tr>`;
   tbl.innerHTML = html;
   $("calcMatCard").style.display = "block";
 }

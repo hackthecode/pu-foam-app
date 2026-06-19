@@ -3,7 +3,7 @@
 // за да се гарантира, че при всяко отваряне се зареждат най-новите данни
 // (live-sync). Офлайн резервът за данните е в localStorage (виж data.js).
 
-const CACHE = "pu-foam-shell-v1";
+const CACHE = "pu-foam-shell-v2";
 const SHELL = [
   "./",
   "./index.html",
