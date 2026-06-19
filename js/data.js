@@ -12,14 +12,13 @@ async function fetchSheet(sheetName) {
 
 // Изтегляне на всички листове паралелно.
 async function fetchAllSheets() {
-  const [formula, recipe, calculator, amine, notes] = await Promise.all([
+  const [formula, recipe, calculator, amine] = await Promise.all([
     fetchSheet(SHEETS.FORMULA),
     fetchSheet(SHEETS.RECIPE),
     fetchSheet(SHEETS.CALCULATOR),
     fetchSheet(SHEETS.AMINE),
-    fetchSheet(SHEETS.NOTES),
   ]);
-  return { formula, recipe, calculator, amine, notes };
+  return { formula, recipe, calculator, amine };
 }
 
 function saveCache(raw) {

@@ -156,24 +156,12 @@ function buildAmineRows(amineRows) {
   return out;
 }
 
-// Извличане на текстовите бележки от листа Notes (първа колона).
-function buildNotes(notesRows) {
-  const out = [];
-  if (!notesRows) return out;
-  for (let r = 0; r < notesRows.length; r++) {
-    const cell = (notesRows[r][0] || "").trim();
-    if (cell.length > 3) out.push(cell);
-  }
-  return out;
-}
-
 // Построяване на пълния модел на данните от всички листове.
 function buildModel(raw) {
   const formulaRows = parseCSV(raw.formula || "");
   const recipeRows = parseCSV(raw.recipe || "");
   const calcRows = parseCSV(raw.calculator || "");
   const amineRows = parseCSV(raw.amine || "");
-  const notesRows = parseCSV(raw.notes || "");
 
   const calibration = buildCalibration(calcRows, amineRows);
   const amineCoeff = buildAmineCoeff(amineRows);
@@ -187,6 +175,5 @@ function buildModel(raw) {
     calibration,
     amineCoeff,
     amineRows: buildAmineRows(amineRows),
-    notes: buildNotes(notesRows),
   };
 }

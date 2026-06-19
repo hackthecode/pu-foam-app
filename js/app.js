@@ -337,13 +337,6 @@ function setupSimulator() {
     });
   });
 
-  // Бележки
-  const nl = $("notesList");
-  nl.innerHTML = MODEL.notes
-    .slice(0, 60)
-    .map((n) => `<div class="note-line">${escapeHtml(n)}</div>`)
-    .join("");
-
   recalcSim();
 }
 function syncChips() {
@@ -373,10 +366,6 @@ function recalcSim() {
   html += `<tr class="total"><td>Общо</td><td class="num val">${fmt(sum, 1)}</td><td class="num">${fmt(sum / 1000, 3)}</td></tr>`;
   $("simTable").innerHTML = html;
   card.style.display = "block";
-}
-
-function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 // ====== Инициализация ======
