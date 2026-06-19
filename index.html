@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0e1116" />
+  <title>ПУ Пяна — Производствен Асистент</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <!-- Зареждащ екран -->
+  <div class="loading-screen" id="loadingScreen">
+    <div class="spinner"></div>
+    <div id="loadingText" style="color:var(--text-dim);font-size:14px;">Зареждане на данните от таблицата…</div>
+  </div>
+
+  <!-- Заглавна лента -->
+  <header class="appbar">
+    <div class="logo">PU</div>
+    <div>
+      <h1>Производствен Асистент</h1>
+      <div class="sub">Пенополиуретан (дунапрен)</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="sync-btn" id="syncBtn" title="Обнови данните">
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+    </button>
+  </header>
+  <div class="sync-status" id="syncStatus">Свързване…</div>
+
+  <main>
+    <!-- ТАБ 1: Калкулатор -->
+    <section class="tab-page active" id="tab-calc">
+      <h2 class="section-title">Калкулатор на материали</h2>
+      <p class="section-desc">Избери рецепта, въведи размери и брой пускове.</p>
+
+      <div class="card">
+        <div class="field">
+          <label class="lbl" for="calcRecipe">Рецепта</label>
+          <select id="calcRecipe"></select>
+        </div>
+        <div class="field">
+          <label class="lbl">Размери на блока (см)</label>
+          <div class="row3">
+            <input type="text" inputmode="decimal" id="calcW" placeholder="Ширина" />
+            <input type="text" inputmode="decimal" id="calcH" placeholder="Височина" />
+            <input type="text" inputmode="decimal" id="calcL" placeholder="Дължина" />
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label class="lbl" for="calcPuls">Брой пускове</label>
+            <input type="text" inputmode="numeric" id="calcPuls" value="1" min="1" />
+          </div>
+          <div class="field">
+            <label class="lbl" for="calcBlockKg">Тегло на блока (кг)</label>
+            <input type="text" inputmode="decimal" id="calcBlockKg" placeholder="измерено" />
+          </div>
+        </div>
+        <p class="hint">Теглото на блока се попълва автоматично с теглото на замеса, но можеш да го смениш с реално измереното тегло за точна плътност.</p>
+      </div>
+
+      <div class="card" id="calcDensityCard" style="display:none;">
+        <div class="density-hero">
+          <div class="num" id="calcDensity">—</div>
+          <div class="unit">кг/м³ — плътност (Density)</div>
+        </div>
+      </div>
+
+      <div class="card" id="calcMatCard" style="display:none;">
+        <table class="mat-table" id="calcMatTable"></table>
+      </div>
+    </section>
+
+    <!-- ТАБ 2: Калибратор -->
+    <section class="tab-page" id="tab-cal">
+      <h2 class="section-title">Калибратор: обороти ↔ количество</h2>
+      <p class="section-desc">Двупосочно пресмятане според калибровъчния коефициент.</p>
+
+      <div class="card">
+        <div class="field">
+          <label class="lbl" for="calMat">Материал</label>
+          <select id="calMat"></select>
+        </div>
+        <div class="field">
+          <label class="lbl" for="calCoeff">Коефициент (грамове на 1 RPM)</label>
+          <input type="text" inputmode="decimal" id="calCoeff" />
+          <p class="hint">Зарежда се от таблицата; можеш да го коригираш ръчно.</p>
+        </div>
+
+        <div class="segment">
+          <button data-dir="rpm2g" class="active">RPM → грамове</button>
+          <button data-dir="g2rpm">грамове → RPM</button>
+        </div>
+
+        <div class="field" id="calInRpmField">
+          <label class="lbl" for="calRpm">Обороти (RPM / пулсове)</label>
+          <input type="text" inputmode="decimal" id="calRpm" placeholder="напр. 2070" />
+        </div>
+        <div class="field" id="calInGField" style="display:none;">
+          <label class="lbl" for="calGrams">Желано количество (грамове)</label>
+          <input type="text" inputmode="decimal" id="calGrams" placeholder="напр. 80000" />
+        </div>
+      </div>
+
+      <div class="card" id="calResCard" style="display:none;">
+        <div class="result-big">
+          <span class="k" id="calResLabel">Резултат</span>
+          <span class="v" id="calResVal">—</span>
+        </div>
+        <div class="result-big">
+          <span class="k">В килограми</span>
+          <span class="v" id="calResKg" style="color:var(--text);">—</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ТАБ 3: Рецепти -->
+    <section class="tab-page" id="tab-rec">
+      <h2 class="section-title">Рецепти и формули</h2>
+      <p class="section-desc">Търси по номер или вид дунапрен.</p>
+      <div class="search-box">
+        <svg class="ic" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <input type="text" id="recSearch" placeholder="Търси рецепта…" />
+      </div>
+      <div id="recList"></div>
+    </section>
+
+    <!-- ТАБ 4: 33LV -->
+    <section class="tab-page" id="tab-amine">
+      <h2 class="section-title">33LV — Амин / Катализатор</h2>
+      <p class="section-desc">Пресмятане грамове ↔ пулсове по калибровка гр/пулс.</p>
+
+      <div class="card">
+        <div class="result-big">
+          <span class="k">Текуща калибровка</span>
+          <span class="v" id="amineCoeffShow">—</span>
+        </div>
+        <div class="field" style="margin-top:14px;">
+          <label class="lbl" for="amineCoeffInput">Коефициент (грамове на 1 пулс)</label>
+          <input type="text" inputmode="decimal" id="amineCoeffInput" />
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="segment">
+          <button data-dir="p2g" class="active">пулсове → грамове</button>
+          <button data-dir="g2p">грамове → пулсове</button>
+        </div>
+        <div class="field" id="amineInPField">
+          <label class="lbl" for="aminePulses">Пулсове</label>
+          <input type="text" inputmode="decimal" id="aminePulses" placeholder="напр. 191" />
+        </div>
+        <div class="field" id="amineInGField" style="display:none;">
+          <label class="lbl" for="amineGrams">Грамове</label>
+          <input type="text" inputmode="decimal" id="amineGrams" placeholder="напр. 192" />
+        </div>
+        <div class="result-big" id="amineResRow" style="display:none;">
+          <span class="k" id="amineResLabel">Резултат</span>
+          <span class="v" id="amineResVal">—</span>
+        </div>
+        <p class="hint" id="amineDiff"></p>
+      </div>
+    </section>
+
+    <!-- ТАБ 5: Симулатор -->
+    <section class="tab-page" id="tab-sim">
+      <h2 class="section-title">Симулатор: тестов блок</h2>
+      <p class="section-desc">Мащабира рецепта към точно целево тегло със запазени пропорции.</p>
+
+      <div class="card">
+        <div class="field">
+          <label class="lbl" for="simRecipe">Рецепта</label>
+          <select id="simRecipe"></select>
+        </div>
+        <div class="field">
+          <label class="lbl" for="simTarget">Целево тегло на тестовия блок (кг)</label>
+          <input type="text" inputmode="decimal" id="simTarget" value="5" />
+          <div class="chips" id="simChips">
+            <span class="chip" data-kg="3">3 кг</span>
+            <span class="chip active" data-kg="5">5 кг</span>
+            <span class="chip" data-kg="10">10 кг</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="simResCard" style="display:none;">
+        <div class="result-big">
+          <span class="k">Коефициент на мащабиране</span>
+          <span class="v" id="simK" style="color:var(--blue);">—</span>
+        </div>
+        <table class="mat-table" id="simTable" style="margin-top:8px;"></table>
+        <p class="hint">Грамажът е изчислен за точно целевото тегло при същите пропорции и индекс като оригиналната рецепта.</p>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title" style="font-size:15px;">Бележки от производството</h2>
+        <div id="notesList" style="margin-top:10px;"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Долна навигация -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button data-tab="tab-calc" class="active">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/></svg>
+      Калкулатор
+    </button>
+    <button data-tab="tab-cal">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+      Калибратор
+    </button>
+    <button data-tab="tab-rec">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+      Рецепти
+    </button>
+    <button data-tab="tab-amine">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3h6M10 3v6l-4 9a2 2 0 0 0 2 3h8a2 2 0 0 0 2-3l-4-9V3"/></svg>
+      33LV
+    </button>
+    <button data-tab="tab-sim">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+      Тестов блок
+    </button>
+  </nav>
+
+  <!-- Модал детайли рецепта -->
+  <div class="modal-overlay" id="recModal">
+    <div class="modal">
+      <div class="grab"></div>
+      <h3 id="recModalTitle">Рецепта</h3>
+      <div class="msub" id="recModalSub"></div>
+      <table class="mat-table" id="recModalTable"></table>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/csv.js"></script>
+  <script src="js/parse.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
