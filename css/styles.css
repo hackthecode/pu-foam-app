@@ -212,12 +212,15 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
 .mat-table tr.total td { border-top: 2px solid var(--border-strong); font-weight: 800; padding-top: 13px; }
 .mat-table tr.total td.val { color: var(--text); }
 
-/* Таблицата в калкулатора има 5 колони — по-компактна, за да се събере на тесни екрани */
-#calcMatTable { font-size: 11.5px; }
-#calcMatTable th { padding: 7px 2px; font-size: 10px; letter-spacing: 0; }
-#calcMatTable td { padding: 8px 2px; }
-#calcMatTable td.name { font-size: 11px; line-height: 1.2; }
+/* Таблицата в калкулатора има 5 колони — компактна, за да се събере на тесни екрани.
+   Числата остават с 3 десетични; пести се място от отстоянията и шрифта на името. */
+#calcMatCard { padding: 12px 8px; }
+#calcMatTable { font-size: 11px; }
+#calcMatTable th { padding: 6px 2px; font-size: 9px; letter-spacing: 0; }
+#calcMatTable td { padding: 7px 2px; }
+#calcMatTable td.name { font-size: 9.5px; line-height: 1.15; padding-right: 4px; }
 #calcMatTable .num { white-space: nowrap; }
+#calcMatTable td.val, #calcMatTable td.num { font-size: 11px; }
 
 /* ====== Списък рецепти (карти) ====== */
 .search-box { position: relative; margin-bottom: 14px; }
