@@ -58,20 +58,73 @@ function setSyncStatus(state, ts) {
   }
 }
 
-// ====== ТАБ 1: Калкулатор ======
-function fillRecipeSelect(sel, includeEmpty) {
-  sel.innerHTML = "";
-  if (includeEmpty) {
-    const o = document.createElement("option");
-    o.value = ""; o.textContent = "— избери —";
-    sel.appendChild(o);
+// ====== Любими рецепти (запазени локално на устройството) ======
+const FAV_KEY = "pu_foam_favorites_v1";
+function getFavorites() {
+  try { return JSON.parse(localStorage.getItem(FAV_KEY)) || []; } catch (e) { return []; }
+}
+function isFavorite(num) { return getFavorites().includes(String(num)); }
+function toggleFavorite(num) {
+  num = String(num);
+  const favs = getFavorites();
+  const i = favs.indexOf(num);
+  if (i >= 0) favs.splice(i, 1); else favs.push(num);
+  localStorage.setItem(FAV_KEY, JSON.stringify(favs));
+}
+
+// ====== Wake Lock — държи екрана включен по време на работа ======
+let wakeLock = null;
+let wakeWanted = false;
+async function requestWake() {
+  try {
+    wakeLock = await navigator.wakeLock.request("screen");
+    wakeLock.addEventListener("release", () => { wakeLock = null; });
+    return true;
+  } catch (e) { return false; }
+}
+async function toggleWakeLock() {
+  const btn = $("wakeBtn");
+  if (wakeWanted) {
+    wakeWanted = false;
+    if (wakeLock) { try { await wakeLock.release(); } catch (e) {} wakeLock = null; }
+    btn.classList.remove("toggle-on");
+  } else {
+    if (!("wakeLock" in navigator)) { alert("Браузърът не поддържа заключване на екрана."); return; }
+    if (await requestWake()) { wakeWanted = true; btn.classList.add("toggle-on"); }
+    else alert("Неуспешно заключване на екрана.");
   }
-  MODEL.recipes.forEach((rec) => {
+}
+
+// ====== ТАБ 1: Калкулатор ======
+// Попълва падащо меню с рецепти (по избор филтриран списък).
+function fillRecipeSelect(sel, recipes) {
+  const list = recipes || MODEL.recipes;
+  const prev = sel.value;
+  sel.innerHTML = "";
+  if (!list.length) {
+    const o = document.createElement("option");
+    o.value = ""; o.textContent = "няма съвпадение";
+    sel.appendChild(o);
+    return;
+  }
+  list.forEach((rec) => {
     const o = document.createElement("option");
     o.value = rec.number;
-    o.textContent = `№${rec.number} — ${rec.kind}`;
+    o.textContent = `№${rec.number} — ${rec.kind}` + (isFavorite(rec.number) ? "  ★" : "");
     sel.appendChild(o);
   });
+  // Запазваме предишния избор, ако още присъства в списъка
+  if (prev && list.some((r) => r.number === prev)) sel.value = prev;
+}
+// Филтрира рецептите по номер / вид / боя.
+function filterRecipes(q) {
+  q = (q || "").trim().toLowerCase();
+  if (!q) return MODEL.recipes;
+  return MODEL.recipes.filter((r) =>
+    r.number.toLowerCase().includes(q) ||
+    r.kind.toLowerCase().includes(q) ||
+    (r.color && r.color.toLowerCase().includes(q))
+  );
 }
 function getRecipe(num) {
   return MODEL.recipes.find((r) => r.number === String(num));
@@ -89,7 +142,7 @@ function calibForMaterial(name) {
 
 function setupCalc() {
   const sel = $("calcRecipe");
-  fillRecipeSelect(sel, false);
+  fillRecipeSelect(sel);
 
   let blockKgEdited = false;
   $("calcBlockKg").addEventListener("input", () => { blockKgEdited = true; recalcCalc(); });
@@ -103,6 +156,11 @@ function setupCalc() {
     recalcCalc();
   }
   sel.addEventListener("change", () => { blockKgEdited = false; onRecipeChange(); });
+  $("calcRecipeSearch").addEventListener("input", () => {
+    fillRecipeSelect(sel, filterRecipes($("calcRecipeSearch").value));
+    blockKgEdited = false;
+    onRecipeChange();
+  });
   ["calcW", "calcH", "calcL", "calcPuls"].forEach((id) =>
     $(id).addEventListener("input", recalcCalc)
   );
@@ -112,7 +170,23 @@ function setupCalc() {
 
 function recalcCalc() {
   const rec = getRecipe($("calcRecipe").value);
-  if (!rec) return;
+  if (!rec) {
+    $("calcMatCard").style.display = "none";
+    $("calcDensityCard").style.display = "none";
+    $("calcIndexHint").style.display = "none";
+    return;
+  }
+
+  // TDI индекс (ако е записан в описанието на рецептата)
+  const ih = $("calcIndexHint");
+  if (rec.index != null) {
+    const danger = rec.index > 120;
+    ih.innerHTML = `TDI индекс: <b style="color:${danger ? "var(--red)" : "var(--green)"}">${fmt(rec.index, 1)}</b>` + (danger ? " ⚠ опасно високо!" : "");
+    ih.style.display = "block";
+  } else {
+    ih.style.display = "none";
+  }
+
   const w = valNum("calcW"), h = valNum("calcH"), l = valNum("calcL");
   const puls = Math.max(1, Math.round(valNum("calcPuls")) || 1);
   const blockKg = valNum("calcBlockKg");
@@ -209,6 +283,13 @@ function recalcCal() {
 // ====== ТАБ 3: Рецепти ======
 function setupRecipes() {
   $("recSearch").addEventListener("input", renderRecipeList);
+  $("favFilterChip").addEventListener("click", () => {
+    const chip = $("favFilterChip");
+    const on = chip.dataset.on === "1";
+    chip.dataset.on = on ? "0" : "1";
+    chip.classList.toggle("active", !on);
+    renderRecipeList();
+  });
   renderRecipeList();
   $("recModal").addEventListener("click", (e) => {
     if (e.target.id === "recModal") closeRecipeModal();
@@ -216,8 +297,10 @@ function setupRecipes() {
 }
 function renderRecipeList() {
   const q = $("recSearch").value.trim().toLowerCase();
+  const onlyFav = $("favFilterChip").dataset.on === "1";
   const list = $("recList");
   const filtered = MODEL.recipes.filter((r) => {
+    if (onlyFav && !isFavorite(r.number)) return false;
     if (!q) return true;
     return (
       r.number.toLowerCase().includes(q) ||
@@ -226,7 +309,7 @@ function renderRecipeList() {
     );
   });
   if (!filtered.length) {
-    list.innerHTML = `<div class="empty">Няма намерени рецепти.</div>`;
+    list.innerHTML = `<div class="empty">${onlyFav ? "Нямаш любими рецепти още." : "Няма намерени рецепти."}</div>`;
     return;
   }
   list.innerHTML = filtered
@@ -235,15 +318,26 @@ function renderRecipeList() {
     <div class="recipe-card" data-num="${r.number}">
       <div class="badge">${r.number}</div>
       <div class="info">
-        <div class="kind">${r.kind}</div>
+        <div class="kind">${r.kind}${r.index != null ? ` <span style="color:var(--text-faint);font-weight:400">· инд ${fmt(r.index, 1)}</span>` : ""}</div>
         <div class="meta">${fmt(r.total, 2)} кг замес${r.color ? " · " + r.color : ""}</div>
       </div>
+      <button class="fav-btn ${isFavorite(r.number) ? "on" : ""}" data-fav="${r.number}" title="Любима">★</button>
       <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
     </div>`
     )
     .join("");
   list.querySelectorAll(".recipe-card").forEach((card) => {
-    card.addEventListener("click", () => openRecipeModal(card.dataset.num));
+    card.addEventListener("click", (e) => {
+      if (e.target.closest(".fav-btn")) return;
+      openRecipeModal(card.dataset.num);
+    });
+  });
+  list.querySelectorAll(".fav-btn").forEach((b) => {
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleFavorite(b.dataset.fav);
+      renderRecipeList();
+    });
   });
 }
 function openRecipeModal(num) {
@@ -251,7 +345,9 @@ function openRecipeModal(num) {
   if (!rec) return;
   $("recModalTitle").textContent = `№${rec.number} — ${rec.kind}`;
   $("recModalSub").textContent =
-    `Общо Смес: ${fmt(rec.total, 2)} кг` + (rec.color ? ` · Боя: ${rec.color}` : "");
+    `Общо Смес: ${fmt(rec.total, 2)} кг` +
+    (rec.color ? ` · Боя: ${rec.color}` : "") +
+    (rec.index != null ? ` · TDI индекс: ${fmt(rec.index, 1)}` : "");
   let html = `<tr><th>Компонент</th><th class="num">за 1 кг</th><th class="num">кг</th><th class="num">RPM</th></tr>`;
   let sumNorm = 0;
   rec.components.forEach((c) => {
@@ -322,9 +418,13 @@ function recalcAmine() {
 // ====== ТАБ 5: Симулатор ======
 function setupSimulator() {
   const sel = $("simRecipe");
-  fillRecipeSelect(sel, false);
+  fillRecipeSelect(sel);
 
   sel.addEventListener("change", recalcSim);
+  $("simRecipeSearch").addEventListener("input", () => {
+    fillRecipeSelect(sel, filterRecipes($("simRecipeSearch").value));
+    recalcSim();
+  });
   $("simTarget").addEventListener("input", () => {
     syncChips();
     recalcSim();
@@ -401,6 +501,12 @@ async function init() {
   }
 
   syncBtn.addEventListener("click", doLoad);
+  $("wakeBtn").addEventListener("click", toggleWakeLock);
+  document.addEventListener("visibilitychange", async () => {
+    if (wakeWanted && wakeLock === null && document.visibilityState === "visible") {
+      await requestWake();
+    }
+  });
   await doLoad();
 }
 

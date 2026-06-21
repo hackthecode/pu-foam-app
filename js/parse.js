@@ -80,12 +80,19 @@ function buildRecipes(formulaRows, recipeRows) {
     // Пропускаме празни/неизползвани рецепти
     if (mtotalFromComp <= 0) continue;
 
+    // TDI индекс — извлича се от текста на "Вид", където е записан
+    // (напр. "НЕ ГОРИМ инд 117,2"). Не се изчислява (липсват OH числа).
+    let index = null;
+    const idxMatch = kind.match(/инд(?:екс)?\.?\s*([0-9]+(?:[.,][0-9]+)?)/i);
+    if (idxMatch) index = parseNum(idxMatch[1]);
+
     recipes.push({
       number: numStr,
       kind: kind || "(без описание)",
       color: colorByNumber[numStr] || "",
       components,
       total: total > 0 ? total : mtotalFromComp,
+      index,
     });
   }
   return recipes;
