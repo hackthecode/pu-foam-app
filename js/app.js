@@ -95,6 +95,68 @@ async function toggleWakeLock() {
   }
 }
 
+// ====== Цени на суровини (запазени локално, в €/кг) ======
+const PRICES_KEY = "pu_foam_prices_v1";
+function getPrices() {
+  try { return JSON.parse(localStorage.getItem(PRICES_KEY)) || {}; } catch (e) { return {}; }
+}
+function setPrices(obj) { localStorage.setItem(PRICES_KEY, JSON.stringify(obj)); }
+function allMaterialNames() {
+  const set = new Set();
+  MODEL.recipes.forEach((r) => r.components.forEach((c) => set.add(c.name)));
+  return [...set].sort();
+}
+// Себестойност (€) на компоненти при множител; null ако няма въведени цени.
+function costOf(components, mult) {
+  const prices = getPrices();
+  let total = 0, any = false;
+  components.forEach((c) => {
+    const p = prices[c.name];
+    if (p != null && !isNaN(p)) { total += c.kg * mult * p; any = true; }
+  });
+  return any ? total : null;
+}
+
+let _priceNames = [];
+function openPricesModal() {
+  const prices = getPrices();
+  _priceNames = allMaterialNames();
+  $("pricesList").innerHTML = _priceNames
+    .map((n, i) => `
+      <div class="field" style="margin-bottom:8px;">
+        <label class="lbl">${n}</label>
+        <input type="text" inputmode="decimal" data-idx="${i}" value="${prices[n] != null ? String(prices[n]).replace(".", ",") : ""}" placeholder="€/кг" />
+      </div>`)
+    .join("");
+  $("pricesModal").classList.add("open");
+}
+function savePrices() {
+  const obj = {};
+  $("pricesList").querySelectorAll("input[data-idx]").forEach((inp) => {
+    const v = parseNum(inp.value);
+    if (!isNaN(v) && v > 0) obj[_priceNames[inp.dataset.idx]] = v;
+  });
+  setPrices(obj);
+  $("pricesModal").classList.remove("open");
+  recalcCalc();
+  recalcSim();
+}
+
+// ====== Споделяне / копиране на текст ======
+async function shareText(title, body) {
+  const full = title + "\n\n" + body + "\n\n— ПУ Пяна асистент";
+  if (navigator.share) {
+    try { await navigator.share({ title, text: full }); return; }
+    catch (e) { if (e.name === "AbortError") return; }
+  }
+  try {
+    await navigator.clipboard.writeText(full);
+    alert("Копирано! Постави го в съобщение или бележка.");
+  } catch (e) {
+    prompt("Копирай текста:", full);
+  }
+}
+
 // ====== ТАБ 1: Калкулатор ======
 // Попълва падащо меню с рецепти (по избор филтриран списък).
 function fillRecipeSelect(sel, recipes) {
@@ -219,6 +281,18 @@ function recalcCalc() {
   html += `<tr class="total"><td>Общо (кг)</td><td class="num"></td><td class="num"></td><td class="num val">${fmt(sum1)}</td><td class="num val">${fmt(sumAll)}</td></tr>`;
   tbl.innerHTML = html;
   $("calcMatCard").style.display = "block";
+
+  // Себестойност (ако са въведени цени на суровини)
+  const cost1 = costOf(rec.components, 1);
+  const costCard = $("calcCostCard");
+  if (cost1 != null) {
+    $("calcCost1").textContent = fmt(cost1, 2) + " €";
+    $("calcCostNlabel").textContent = `За ${puls} ${puls === 1 ? "пуск" : "пуска"}`;
+    $("calcCostN").textContent = fmt(cost1 * puls, 2) + " €";
+    costCard.style.display = "block";
+  } else {
+    costCard.style.display = "none";
+  }
 }
 
 // ====== ТАБ 2: Калибратор ======
@@ -429,10 +503,21 @@ function setupSimulator() {
     syncChips();
     recalcSim();
   });
+  $("simPct").addEventListener("input", recalcSim);
   document.querySelectorAll("#simChips .chip").forEach((chip) => {
     chip.addEventListener("click", () => {
       $("simTarget").value = chip.dataset.kg;
       syncChips();
+      recalcSim();
+    });
+  });
+  // Превключвател между режим "по тегло" и "корекция ±%"
+  document.querySelectorAll("#simModeSeg button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#simModeSeg button").forEach((b) => b.classList.toggle("active", b === btn));
+      const kg = btn.dataset.mode === "kg";
+      $("simKgField").style.display = kg ? "block" : "none";
+      $("simPctField").style.display = kg ? "none" : "block";
       recalcSim();
     });
   });
@@ -447,14 +532,23 @@ function syncChips() {
 }
 function recalcSim() {
   const rec = getRecipe($("simRecipe").value);
-  const target = valNum("simTarget");
   const card = $("simResCard");
-  if (!rec || isNaN(target) || target <= 0 || rec.total <= 0) {
-    card.style.display = "none";
-    return;
+  if (!rec || rec.total <= 0) { card.style.display = "none"; return; }
+
+  const mode = document.querySelector("#simModeSeg button.active").dataset.mode;
+  let K;
+  if (mode === "kg") {
+    const target = valNum("simTarget");
+    if (isNaN(target) || target <= 0) { card.style.display = "none"; return; }
+    K = target / rec.total;
+    $("simK").textContent = "× " + fmt(K, 5);
+  } else {
+    const pct = valNum("simPct");
+    if (isNaN(pct)) { card.style.display = "none"; return; }
+    K = 1 + pct / 100;
+    if (K <= 0) { card.style.display = "none"; return; }
+    $("simK").textContent = (pct >= 0 ? "+" : "") + fmt(pct, 1) + "%  (× " + fmt(K, 4) + ")";
   }
-  const K = target / rec.total;
-  $("simK").textContent = "× " + fmt(K, 5);
 
   let html = `<tr><th>Материал</th><th class="num">грамове</th><th class="num">кг</th></tr>`;
   let sum = 0;
@@ -466,6 +560,35 @@ function recalcSim() {
   html += `<tr class="total"><td>Общо</td><td class="num val">${fmt(sum, 1)}</td><td class="num">${fmt(sum / 1000, 3)}</td></tr>`;
   $("simTable").innerHTML = html;
   card.style.display = "block";
+}
+
+// Текстови отчети за споделяне
+function calcShareText() {
+  const rec = getRecipe($("calcRecipe").value);
+  if (!rec) return ["", ""];
+  const puls = Math.max(1, Math.round(valNum("calcPuls")) || 1);
+  const lines = [];
+  if (rec.index != null) lines.push(`TDI индекс: ${fmt(rec.index, 1)}`);
+  lines.push(`Брой пускове: ${puls}`, "");
+  rec.components.forEach((c) => {
+    let rpm = c.rpm;
+    if (rpm == null) { const cal = calibForMaterial(c.name); if (cal) rpm = (c.kg * 1000) / cal; }
+    lines.push(`${c.name}: ${rpm != null ? fmtInt(rpm) + " об" : "—"} | ${fmt(c.kg)} кг/пуск`);
+  });
+  const cost = costOf(rec.components, puls);
+  if (cost != null) lines.push("", `Себестойност (${puls} пуска): ${fmt(cost, 2)} €`);
+  return [`Рецепта №${rec.number} — ${rec.kind}`, lines.join("\n")];
+}
+function simShareText() {
+  const rec = getRecipe($("simRecipe").value);
+  if (!rec) return ["", ""];
+  const rows = $("simTable").rows;
+  const lines = [];
+  for (let i = 1; i < rows.length; i++) {
+    const c = rows[i].cells;
+    lines.push(`${c[0].textContent}: ${c[1].textContent} гр`);
+  }
+  return [`Тестов блок — Рецепта №${rec.number} (${rec.kind})`, lines.join("\n")];
 }
 
 // ====== Инициализация ======
@@ -507,6 +630,14 @@ async function init() {
       await requestWake();
     }
   });
+
+  // Цени и споделяне
+  $("calcPricesBtn").addEventListener("click", openPricesModal);
+  $("pricesSaveBtn").addEventListener("click", savePrices);
+  $("pricesModal").addEventListener("click", (e) => { if (e.target.id === "pricesModal") $("pricesModal").classList.remove("open"); });
+  $("calcShareBtn").addEventListener("click", () => { const [t, b] = calcShareText(); if (t) shareText(t, b); });
+  $("simShareBtn").addEventListener("click", () => { const [t, b] = simShareText(); if (t) shareText(t, b); });
+
   await doLoad();
 }
 

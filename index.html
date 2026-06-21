@@ -75,8 +75,24 @@
         </div>
       </div>
 
+      <div class="card" id="calcCostCard" style="display:none;">
+        <div class="result-big">
+          <span class="k">Себестойност на замес</span>
+          <span class="v" id="calcCost1" style="color:var(--green);">—</span>
+        </div>
+        <div class="result-big">
+          <span class="k" id="calcCostNlabel">Общо</span>
+          <span class="v" id="calcCostN" style="color:var(--green);">—</span>
+        </div>
+        <p class="hint">Изчислено по цените на суровините, които си въвел.</p>
+      </div>
+
       <div class="card" id="calcMatCard" style="display:none;">
         <table class="mat-table" id="calcMatTable"></table>
+        <div class="row2" style="margin-top:14px;">
+          <button class="btn secondary" id="calcPricesBtn">💶 Цени</button>
+          <button class="btn secondary" id="calcShareBtn">📋 Сподели</button>
+        </div>
       </div>
     </section>
 
@@ -185,7 +201,11 @@
           <input type="text" id="simRecipeSearch" placeholder="🔍 Търси по номер или вид…" autocomplete="off" style="margin-bottom:8px;" />
           <select id="simRecipe"></select>
         </div>
-        <div class="field">
+        <div class="segment" id="simModeSeg">
+          <button data-mode="kg" class="active">По тегло (кг)</button>
+          <button data-mode="pct">Корекция ±%</button>
+        </div>
+        <div class="field" id="simKgField">
           <label class="lbl" for="simTarget">Целево тегло на тестовия блок (кг)</label>
           <input type="text" inputmode="decimal" id="simTarget" value="5" />
           <div class="chips" id="simChips">
@@ -193,6 +213,11 @@
             <span class="chip active" data-kg="5">5 кг</span>
             <span class="chip" data-kg="10">10 кг</span>
           </div>
+        </div>
+        <div class="field" id="simPctField" style="display:none;">
+          <label class="lbl" for="simPct">Корекция спрямо замеса (%)</label>
+          <input type="text" inputmode="decimal" id="simPct" placeholder="напр. 8 или -5" />
+          <p class="hint">Положително число = повече, отрицателно = по-малко от стандартния замес.</p>
         </div>
       </div>
 
@@ -203,6 +228,7 @@
         </div>
         <table class="mat-table" id="simTable" style="margin-top:8px;"></table>
         <p class="hint">Грамажът е изчислен за точно целевото тегло при същите пропорции и индекс като оригиналната рецепта.</p>
+        <button class="btn secondary" id="simShareBtn" style="margin-top:14px;">📋 Сподели</button>
       </div>
     </section>
   </main>
@@ -238,6 +264,17 @@
       <h3 id="recModalTitle">Рецепта</h3>
       <div class="msub" id="recModalSub"></div>
       <table class="mat-table" id="recModalTable"></table>
+    </div>
+  </div>
+
+  <!-- Модал цени на суровини -->
+  <div class="modal-overlay" id="pricesModal">
+    <div class="modal">
+      <div class="grab"></div>
+      <h3>Цени на суровините</h3>
+      <div class="msub">Въведи цена в €/кг. Запазват се на това устройство.</div>
+      <div id="pricesList"></div>
+      <button class="btn" id="pricesSaveBtn" style="margin-top:14px;">Запази</button>
     </div>
   </div>
 
