@@ -330,13 +330,32 @@ select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmln
   flex: 1;
   background: none; border: none;
   color: var(--text-faint);
-  padding: 9px 2px 8px;
-  font-size: 10.5px;
+  padding: 9px 1px 8px;
+  font-size: 9.5px;
   display: flex; flex-direction: column; align-items: center; gap: 3px;
   cursor: pointer;
 }
-.bottom-nav button .ic { width: 24px; height: 24px; }
+.bottom-nav button .ic { width: 22px; height: 22px; }
 .bottom-nav button.active { color: var(--accent); }
+
+/* ====== Дневник на замесите ====== */
+.log-item {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.log-item .log-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.log-item .log-recipe { font-weight: 600; font-size: 14px; }
+.log-item .log-date { font-size: 11px; color: var(--text-faint); flex-shrink: 0; }
+.log-item .log-body { font-size: 13px; color: var(--text-dim); margin-top: 6px; line-height: 1.5; }
+.log-item .log-dens { color: var(--accent); font-weight: 700; }
+.log-item .log-del { background: none; border: none; color: var(--red); font-size: 12px; cursor: pointer; margin-top: 6px; padding: 0; }
+
+/* Подчертани предупреждения за безопасност в помощта */
+.note-line.danger { border-left-color: var(--red); }
+.note-line.danger b { color: var(--red); }
 
 /* ====== Модал за детайли на рецепта ====== */
 .modal-overlay {

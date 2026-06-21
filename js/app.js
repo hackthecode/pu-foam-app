@@ -591,6 +591,71 @@ function simShareText() {
   return [`Тестов блок — Рецепта №${rec.number} (${rec.kind})`, lines.join("\n")];
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ====== ТАБ 6: Дневник на замесите (запазен локално) ======
+const LOG_KEY = "pu_foam_batch_log_v1";
+function getLog() { try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch (e) { return []; } }
+function setLog(arr) { localStorage.setItem(LOG_KEY, JSON.stringify(arr)); }
+function addLogFromCalc() {
+  const rec = getRecipe($("calcRecipe").value);
+  if (!rec) { alert("Първо избери рецепта в таб Калкулатор."); return; }
+  const w = valNum("calcW"), h = valNum("calcH"), l = valNum("calcL"), blockKg = valNum("calcBlockKg");
+  const puls = Math.max(1, Math.round(valNum("calcPuls")) || 1);
+  let density = null;
+  if (!isNaN(w) && !isNaN(h) && !isNaN(l) && w > 0 && h > 0 && l > 0 && !isNaN(blockKg) && blockKg > 0) {
+    density = blockKg / ((w / 100) * (h / 100) * (l / 100));
+  }
+  const entry = {
+    ts: Date.now(), num: rec.number, kind: rec.kind,
+    w: isNaN(w) ? null : w, h: isNaN(h) ? null : h, l: isNaN(l) ? null : l,
+    blockKg: isNaN(blockKg) ? null : blockKg, density, puls,
+  };
+  const log = getLog();
+  log.unshift(entry);
+  setLog(log);
+  renderLog();
+  alert("Записано в дневника! Виж го в таб Дневник.");
+}
+function renderLog() {
+  const list = $("logList");
+  if (!list) return;
+  const log = getLog();
+  if (!log.length) { list.innerHTML = `<div class="empty">Няма записи още.</div>`; return; }
+  list.innerHTML = log.map((e) => {
+    const d = new Date(e.ts);
+    const dateStr = d.toLocaleString("bg-BG", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    const dims = e.w && e.h && e.l ? `${fmt(e.w, 0)}×${fmt(e.h, 0)}×${fmt(e.l, 0)} см` : "—";
+    return `<div class="log-item">
+      <div class="log-head">
+        <span class="log-recipe">№${e.num} — ${escapeHtml(e.kind)}</span>
+        <span class="log-date">${dateStr}</span>
+      </div>
+      <div class="log-body">
+        Размери: ${dims} · Тегло: ${e.blockKg != null ? fmt(e.blockKg, 2) + " кг" : "—"} · Пускове: ${e.puls}<br>
+        Плътност: <span class="log-dens">${e.density != null ? fmt(e.density, 2) + " кг/м³" : "—"}</span>
+      </div>
+      <button class="log-del" data-ts="${e.ts}">Изтрий</button>
+    </div>`;
+  }).join("");
+  list.querySelectorAll(".log-del").forEach((b) => b.addEventListener("click", () => {
+    if (confirm("Изтрий този запис?")) { setLog(getLog().filter((e) => String(e.ts) !== b.dataset.ts)); renderLog(); }
+  }));
+}
+
+// ====== Помощ / Безопасност (бележки от листа Notes) ======
+function renderHelp() {
+  const list = $("helpList");
+  if (!MODEL.notes || !MODEL.notes.length) { list.innerHTML = `<div class="empty">Няма бележки.</div>`; return; }
+  const dangerRe = /опасн|експлоз|внимани|!!!/i;
+  list.innerHTML = MODEL.notes.map((n) => {
+    const danger = dangerRe.test(n);
+    return `<div class="note-line${danger ? " danger" : ""}">${danger ? "⚠ " : ""}${escapeHtml(n)}</div>`;
+  }).join("");
+}
+
 // ====== Инициализация ======
 function renderAll() {
   setupCalc();
@@ -598,6 +663,7 @@ function renderAll() {
   setupRecipes();
   setupAmine();
   setupSimulator();
+  renderLog();
 }
 
 async function init() {
@@ -637,6 +703,11 @@ async function init() {
   $("pricesModal").addEventListener("click", (e) => { if (e.target.id === "pricesModal") $("pricesModal").classList.remove("open"); });
   $("calcShareBtn").addEventListener("click", () => { const [t, b] = calcShareText(); if (t) shareText(t, b); });
   $("simShareBtn").addEventListener("click", () => { const [t, b] = simShareText(); if (t) shareText(t, b); });
+
+  // Дневник и помощ
+  $("calcLogBtn").addEventListener("click", addLogFromCalc);
+  $("helpBtn").addEventListener("click", () => { renderHelp(); $("helpModal").classList.add("open"); });
+  $("helpModal").addEventListener("click", (e) => { if (e.target.id === "helpModal") $("helpModal").classList.remove("open"); });
 
   await doLoad();
 }

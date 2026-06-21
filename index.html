@@ -25,6 +25,9 @@
       <div class="sub">Пенополиуретан (дунапрен)</div>
     </div>
     <div class="spacer"></div>
+    <button class="sync-btn" id="helpBtn" title="Помощ и безопасност">
+      <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12" y2="17"/></svg>
+    </button>
     <button class="sync-btn" id="wakeBtn" title="Дръж екрана включен">
       <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
     </button>
@@ -93,6 +96,7 @@
           <button class="btn secondary" id="calcPricesBtn">💶 Цени</button>
           <button class="btn secondary" id="calcShareBtn">📋 Сподели</button>
         </div>
+        <button class="btn" id="calcLogBtn" style="margin-top:10px;">📓 Запиши в дневника</button>
       </div>
     </section>
 
@@ -231,6 +235,16 @@
         <button class="btn secondary" id="simShareBtn" style="margin-top:14px;">📋 Сподели</button>
       </div>
     </section>
+
+    <!-- ТАБ 6: Дневник -->
+    <section class="tab-page" id="tab-log">
+      <h2 class="section-title">Дневник на замесите</h2>
+      <p class="section-desc">Записвай реалните замеси, за да следиш плътността във времето. Записите се пазят на това устройство.</p>
+      <div class="card" style="padding:14px;">
+        <p class="hint" style="margin:0;">За да добавиш запис: попълни рецепта, размери и измерено тегло в таб <b>Калкулатор</b>, после натисни <b>„📓 Запиши в дневника"</b>.</p>
+      </div>
+      <div id="logList"></div>
+    </section>
   </main>
 
   <!-- Долна навигация -->
@@ -255,6 +269,10 @@
       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
       Тестов блок
     </button>
+    <button data-tab="tab-log">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h16v16H4z"/><line x1="4" y1="9" x2="20" y2="9"/><line x1="9" y1="4" x2="9" y2="20"/></svg>
+      Дневник
+    </button>
   </nav>
 
   <!-- Модал детайли рецепта -->
@@ -275,6 +293,16 @@
       <div class="msub">Въведи цена в €/кг. Запазват се на това устройство.</div>
       <div id="pricesList"></div>
       <button class="btn" id="pricesSaveBtn" style="margin-top:14px;">Запази</button>
+    </div>
+  </div>
+
+  <!-- Модал помощ / безопасност -->
+  <div class="modal-overlay" id="helpModal">
+    <div class="modal">
+      <div class="grab"></div>
+      <h3>Помощ и безопасност</h3>
+      <div class="msub">Бележки от производството (от таблицата).</div>
+      <div id="helpList"></div>
     </div>
   </div>
 
