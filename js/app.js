@@ -140,6 +140,7 @@ function savePrices() {
   $("pricesModal").classList.remove("open");
   recalcCalc();
   recalcSim();
+  if (MODEL && $("multiRec0")) recalcMulti();
 }
 
 // ====== Споделяне / копиране на текст ======
@@ -645,6 +646,179 @@ function renderLog() {
   }));
 }
 
+// ====== ТАБ 7: Сборен калкулатор (до 10 рецепти × брой) ======
+const MULTI_KEY = "pu_foam_multi_v1";
+const MULTI_ROWS = 10;
+let _multiBound = false;
+
+function getMultiState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(MULTI_KEY));
+    if (Array.isArray(s)) return s;
+  } catch (e) {}
+  return [];
+}
+function saveMultiState() {
+  const rows = [];
+  for (let i = 0; i < MULTI_ROWS; i++) {
+    rows.push({ num: $("multiRec" + i).value, cnt: $("multiCnt" + i).value });
+  }
+  localStorage.setItem(MULTI_KEY, JSON.stringify(rows));
+}
+// Нормализиран ключ за материал (някои имена са с двойни интервали)
+function matKey(name) { return String(name).replace(/\s+/g, " ").trim().toLowerCase(); }
+
+function setupMulti() {
+  const wrap = $("multiRows");
+  const state = getMultiState();
+  // При повторно зареждане на данните пазим текущо въведеното
+  if (wrap.children.length) {
+    for (let i = 0; i < MULTI_ROWS; i++) {
+      state[i] = { num: $("multiRec" + i).value, cnt: $("multiCnt" + i).value };
+    }
+  }
+  let html = "";
+  for (let i = 0; i < MULTI_ROWS; i++) {
+    html += `<div class="multi-row">
+      <span class="multi-idx">${i + 1}</span>
+      <select id="multiRec${i}" data-i="${i}"></select>
+      <input type="text" inputmode="decimal" id="multiCnt${i}" placeholder="0" />
+    </div>`;
+  }
+  wrap.innerHTML = html;
+
+  for (let i = 0; i < MULTI_ROWS; i++) {
+    const sel = $("multiRec" + i);
+    let opts = `<option value="">— избери —</option>`;
+    MODEL.recipes.forEach((r) => {
+      opts += `<option value="${escapeHtml(r.number)}">№${escapeHtml(r.number)} — ${escapeHtml(r.kind)}${isFavorite(r.number) ? "  ★" : ""}</option>`;
+    });
+    sel.innerHTML = opts;
+    const st = state[i] || {};
+    if (st.num && getRecipe(st.num)) sel.value = st.num;
+    $("multiCnt" + i).value = st.cnt || "";
+    sel.addEventListener("change", () => {
+      // При избор на рецепта без брой — слагаме 1 по подразбиране
+      const cnt = $("multiCnt" + i);
+      if (sel.value && !cnt.value.trim()) cnt.value = "1";
+      onMultiChange();
+    });
+    $("multiCnt" + i).addEventListener("input", onMultiChange);
+  }
+
+  if (!_multiBound) {
+    _multiBound = true;
+    $("multiClearBtn").addEventListener("click", () => {
+      if (!confirm("Изчисти всички редове?")) return;
+      for (let i = 0; i < MULTI_ROWS; i++) { $("multiRec" + i).value = ""; $("multiCnt" + i).value = ""; }
+      onMultiChange();
+    });
+    $("multiShareBtn").addEventListener("click", () => { const [t, b] = multiShareText(); if (t) shareText(t, b); });
+  }
+  recalcMulti();
+}
+function onMultiChange() { saveMultiState(); recalcMulti(); }
+
+// Връща попълнените редове: [{rec, cnt}]
+function multiEntries() {
+  const out = [];
+  for (let i = 0; i < MULTI_ROWS; i++) {
+    const rec = getRecipe($("multiRec" + i).value);
+    const cnt = valNum("multiCnt" + i);
+    const inp = $("multiCnt" + i);
+    const bad = rec && (isNaN(cnt) || cnt <= 0) && inp.value.trim() !== "";
+    inp.classList.toggle("invalid", !!bad);
+    if (rec && !isNaN(cnt) && cnt > 0) out.push({ rec, cnt, row: i + 1 });
+  }
+  return out;
+}
+// Сумира материалите по име за всички редове (запазва реда на появяване)
+function multiTotals(entries) {
+  const map = new Map();
+  entries.forEach(({ rec, cnt }) => {
+    rec.components.forEach((c) => {
+      const k = matKey(c.name);
+      if (!map.has(k)) map.set(k, { name: c.name, kg: 0 });
+      map.get(k).kg += c.kg * cnt;
+    });
+  });
+  return [...map.values()];
+}
+function cntLabel(n) { return n === 1 ? "пуск" : "пуска"; }
+
+function recalcMulti() {
+  const entries = multiEntries();
+  const totalCard = $("multiTotalCard");
+  const per = $("multiPerRecipe");
+  if (!entries.length) {
+    totalCard.style.display = "none";
+    per.innerHTML = `<div class="empty">Избери рецепта и брой поне на един ред.</div>`;
+    return;
+  }
+
+  // --- Общо за всички ---
+  const totals = multiTotals(entries);
+  let grand = 0;
+  let html = `<tr><th>Материал</th><th class="num">кг</th><th class="num">%</th></tr>`;
+  totals.forEach((t) => { grand += t.kg; });
+  totals.forEach((t) => {
+    const pct = grand > 0 ? (t.kg / grand) * 100 : 0;
+    html += `<tr><td class="name">${escapeHtml(t.name)}</td><td class="num val">${fmtKg(t.kg)}</td><td class="num" style="color:var(--text-dim)">${fmt(pct, 1)}</td></tr>`;
+  });
+  html += `<tr class="total"><td>Общо (кг)</td><td class="num val">${fmtKg(grand)}</td><td class="num"></td></tr>`;
+  $("multiTotalTable").innerHTML = html;
+  const totalCnt = entries.reduce((s, e) => s + e.cnt, 0);
+  $("multiTotalSub").textContent = `${entries.length} ${entries.length === 1 ? "рецепта" : "рецепти"} · ${fmt(totalCnt, totalCnt % 1 ? 1 : 0)} ${cntLabel(totalCnt)} общо`;
+
+  let costAll = 0, anyCost = false;
+  entries.forEach(({ rec, cnt }) => {
+    const c = costOf(rec.components, cnt);
+    if (c != null) { costAll += c; anyCost = true; }
+  });
+  $("multiCostRow").style.display = anyCost ? "flex" : "none";
+  if (anyCost) $("multiCost").textContent = fmt(costAll, 2) + " €";
+  totalCard.style.display = "block";
+
+  // --- Поотделно за всяка рецепта ---
+  per.innerHTML = entries.map(({ rec, cnt, row }) => {
+    let t = `<tr><th>Материал</th><th class="num">1 пуск</th><th class="num">× ${fmt(cnt, cnt % 1 ? 1 : 0)}</th></tr>`;
+    let s1 = 0;
+    rec.components.forEach((c) => {
+      s1 += c.kg;
+      t += `<tr><td class="name">${escapeHtml(c.name)}</td><td class="num" style="color:var(--text-dim)">${fmt(c.kg)}</td><td class="num val">${fmtKg(c.kg * cnt)}</td></tr>`;
+    });
+    t += `<tr class="total"><td>Общо (кг)</td><td class="num">${fmt(s1)}</td><td class="num val">${fmtKg(s1 * cnt)}</td></tr>`;
+    const cost = costOf(rec.components, cnt);
+    return `<details class="card multi-rec">
+      <summary>
+        <span class="multi-rec-title"><span class="multi-idx">${row}</span>№${escapeHtml(rec.number)} — ${escapeHtml(rec.kind)}</span>
+        <span class="multi-rec-sum">${fmt(cnt, cnt % 1 ? 1 : 0)} ${cntLabel(cnt)} · ${fmtKg(s1 * cnt)} кг${cost != null ? " · " + fmt(cost, 2) + " €" : ""}</span>
+      </summary>
+      <table class="mat-table" style="margin-top:8px;">${t}</table>
+    </details>`;
+  }).join("");
+}
+
+function multiShareText() {
+  const entries = multiEntries();
+  if (!entries.length) return ["", ""];
+  const lines = [];
+  entries.forEach(({ rec, cnt }) => {
+    const s1 = rec.components.reduce((s, c) => s + c.kg, 0);
+    lines.push(`№${rec.number} — ${rec.kind} × ${fmt(cnt, cnt % 1 ? 1 : 0)} (${fmtKg(s1 * cnt)} кг)`);
+    rec.components.forEach((c) => lines.push(`   ${c.name}: ${fmtKg(c.kg * cnt)} кг`));
+    lines.push("");
+  });
+  lines.push("ОБЩО ЗА ВСИЧКИ:");
+  let grand = 0;
+  multiTotals(entries).forEach((t) => { grand += t.kg; lines.push(`${t.name}: ${fmtKg(t.kg)} кг`); });
+  lines.push(`Общо: ${fmtKg(grand)} кг`);
+  let costAll = 0, any = false;
+  entries.forEach(({ rec, cnt }) => { const c = costOf(rec.components, cnt); if (c != null) { costAll += c; any = true; } });
+  if (any) lines.push(`Себестойност: ${fmt(costAll, 2)} €`);
+  return ["Сборен калкулатор — материали", lines.join("\n")];
+}
+
 // ====== Помощ / Безопасност (бележки от листа Notes) ======
 function renderHelp() {
   const list = $("helpList");
@@ -663,6 +837,7 @@ function renderAll() {
   setupRecipes();
   setupAmine();
   setupSimulator();
+  setupMulti();
   renderLog();
 }
 
