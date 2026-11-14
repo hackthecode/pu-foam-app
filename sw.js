@@ -3,7 +3,7 @@
 // за да се гарантира, че при всяко отваряне се зареждат най-новите данни
 // (live-sync). Офлайн резервът за данните е в localStorage (виж data.js).
 
-const CACHE = "pu-foam-shell-v8";
+const CACHE = "pu-foam-shell-v9";
 const SHELL = [
   "./",
   "./index.html",
@@ -15,10 +15,16 @@ const SHELL = [
   "./js/app.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",
+  "./icons/icon-192.png",
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // cache: "reload" — взимаме файловете от мрежата, не от HTTP кеша на браузъра
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: "reload" }))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (e) => {
@@ -31,6 +37,7 @@ self.addEventListener("activate", (e) => {
 
 self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
+  if (e.request.method !== "GET") return;
 
   // Заявките към Google (данните) минават директно по мрежата — без кеш.
   if (url.hostname.includes("google.com") || url.hostname.includes("googleusercontent.com")) {

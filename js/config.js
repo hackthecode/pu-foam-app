@@ -1,4 +1,7 @@
 // Конфигурация на приложението
+// Версия (показва се в менюто). При промяна вдигни и CACHE в sw.js.
+const APP_VERSION = "2.0";
+
 // Идентификатор на Google Sheets таблицата (публично достъпна за четене)
 const SHEET_ID = "1YID36c0sLq-lJQcG5h0qYMK7938CCmDQe-ST-1f4yOs";
 

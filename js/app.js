@@ -27,18 +27,52 @@ function valNum(id) {
 }
 
 // ====== Навигация между табове ======
+const TAB_KEY = "pu_foam_tab_v1";
+function showTab(tab) {
+  if (!tab || !$(tab)) tab = "tab-calc";
+  document.querySelectorAll("button[data-tab]").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(".tab-page").forEach((p) => p.classList.toggle("active", p.id === tab));
+  // Ако табът е от менюто „Още“, на телефон светва бутонът „Още“
+  const isSec = !!document.querySelector(`#bottomNav button.sec[data-tab="${tab}"]`);
+  $("navMore").classList.toggle("active", isSec);
+  $("moreModal").classList.remove("open");
+  try { localStorage.setItem(TAB_KEY, tab); } catch (e) {}
+  window.scrollTo(0, 0);
+  if (MODEL) {
+    if (tab === "tab-multi") recalcMulti();
+    if (tab === "tab-stock") recalcStock();
+  }
+}
+function currentTabTitle() {
+  const h = document.querySelector(".tab-page.active .section-title");
+  return h ? h.textContent : "";
+}
 function setupNav() {
-  const nav = $("bottomNav");
-  nav.querySelectorAll("button").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const tab = btn.dataset.tab;
-      nav.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
-      document.querySelectorAll(".tab-page").forEach((p) => {
-        p.classList.toggle("active", p.id === tab);
-      });
-      window.scrollTo(0, 0);
-    });
+  document.querySelectorAll("button[data-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => showTab(btn.dataset.tab));
   });
+  $("navMore").addEventListener("click", () => $("moreModal").classList.add("open"));
+  $("moreModal").addEventListener("click", (e) => { if (e.target.id === "moreModal") $("moreModal").classList.remove("open"); });
+  const v = "Версия " + APP_VERSION;
+  $("navVersion").textContent = v;
+  $("moreVersion").textContent = v;
+  let saved = null;
+  try { saved = localStorage.getItem(TAB_KEY); } catch (e) {}
+  showTab(saved);
+  // Escape затваря отворения модал (удобно на компютър)
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") document.querySelectorAll(".modal-overlay.open").forEach((m) => m.classList.remove("open"));
+  });
+}
+
+// ====== Кратко известие (вместо системен прозорец) ======
+let _toastTimer = null;
+function toast(msg) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
 }
 
 // ====== Статус на синхронизация ======
@@ -47,12 +81,12 @@ function setSyncStatus(state, ts) {
   el.className = "sync-status " + state;
   if (state === "live") {
     const t = ts ? new Date(ts).toLocaleTimeString("bg-BG", { hour: "2-digit", minute: "2-digit" }) : "";
-    el.textContent = `● Данните са актуални от таблицата (${t})`;
+    el.textContent = `● Актуални данни${t ? " · " + t : ""}`;
   } else if (state === "cache") {
     const t = ts ? new Date(ts).toLocaleString("bg-BG") : "неизвестно";
-    el.textContent = `⚠ Офлайн — кеширани данни от ${t}`;
+    el.textContent = `⚠ Офлайн · данни от ${t}`;
   } else if (state === "error") {
-    el.textContent = "✕ Няма данни. Провери интернет връзката.";
+    el.textContent = "✕ Няма данни. Провери интернета.";
   } else {
     el.textContent = "Свързване…";
   }
@@ -89,9 +123,9 @@ async function toggleWakeLock() {
     if (wakeLock) { try { await wakeLock.release(); } catch (e) {} wakeLock = null; }
     btn.classList.remove("toggle-on");
   } else {
-    if (!("wakeLock" in navigator)) { alert("Браузърът не поддържа заключване на екрана."); return; }
-    if (await requestWake()) { wakeWanted = true; btn.classList.add("toggle-on"); }
-    else alert("Неуспешно заключване на екрана.");
+    if (!("wakeLock" in navigator)) { toast("Браузърът не поддържа задържане на екрана."); return; }
+    if (await requestWake()) { wakeWanted = true; btn.classList.add("toggle-on"); toast("Екранът ще стои включен."); }
+    else toast("Екранът не може да се задържи включен.");
   }
 }
 
@@ -124,7 +158,7 @@ function openPricesModal() {
   $("pricesList").innerHTML = _priceNames
     .map((n, i) => `
       <div class="field" style="margin-bottom:8px;">
-        <label class="lbl">${n}</label>
+        <label class="lbl">${escapeHtml(n)}</label>
         <input type="text" inputmode="decimal" data-idx="${i}" value="${prices[n] != null ? String(prices[n]).replace(".", ",") : ""}" placeholder="€/кг" />
       </div>`)
     .join("");
@@ -141,6 +175,7 @@ function savePrices() {
   recalcCalc();
   recalcSim();
   if (MODEL && $("multiRec0")) recalcMulti();
+  toast("Цените са запазени.");
 }
 
 // ====== Споделяне / копиране на текст ======
@@ -152,7 +187,7 @@ async function shareText(title, body) {
   }
   try {
     await navigator.clipboard.writeText(full);
-    alert("Копирано! Постави го в съобщение или бележка.");
+    toast("Копирано. Постави го в съобщение или бележка.");
   } catch (e) {
     prompt("Копирай текста:", full);
   }
@@ -179,16 +214,94 @@ function fillRecipeSelect(sel, recipes) {
   // Запазваме предишния избор, ако още присъства в списъка
   if (prev && list.some((r) => r.number === prev)) sel.value = prev;
 }
-// Филтрира рецептите по номер / вид / боя.
-function filterRecipes(q) {
-  q = (q || "").trim().toLowerCase();
-  if (!q) return MODEL.recipes;
-  return MODEL.recipes.filter((r) =>
-    r.number.toLowerCase().includes(q) ||
-    r.kind.toLowerCase().includes(q) ||
-    (r.color && r.color.toLowerCase().includes(q))
-  );
+// ====== Избор на рецепта: бутон, който отваря лист с търсене ======
+// Скритият <select> остава източник на стойността; бутонът само го управлява.
+let _pickSel = null;
+function attachPicker(sel, placeholder) {
+  if (!sel._pickBtn) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "picker-btn";
+    sel.style.display = "none";
+    sel.after(b);
+    b.addEventListener("click", () => openPicker(sel));
+    sel._pickBtn = b;
+  }
+  sel._ph = placeholder || "Избери рецепта";
+  refreshPicker(sel);
 }
+function refreshPicker(sel) {
+  const b = sel._pickBtn;
+  if (!b) return;
+  const rec = getRecipe(sel.value);
+  b.classList.toggle("unset", !rec);
+  const chev = `<svg class="pk-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>`;
+  b.innerHTML = rec
+    ? `<span class="pk-num">${escapeHtml(rec.number)}</span><span class="pk-kind">${escapeHtml(rec.kind)}</span>${chev}`
+    : `<span class="pk-kind">${escapeHtml(sel._ph)}</span>${chev}`;
+}
+function openPicker(sel) {
+  _pickSel = sel;
+  $("pickSearch").value = "";
+  renderPickList();
+  $("pickModal").classList.add("open");
+  $("pickModal").querySelector(".modal").scrollTop = 0;
+  // На компютър фокусираме търсачката; на телефон не, за да не скача клавиатурата
+  if (window.matchMedia("(pointer: fine)").matches) $("pickSearch").focus();
+}
+// Търсене по думи: всяка дума трябва да се среща в номера, вида или боята.
+function searchRecipes(q) {
+  const words = (q || "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+  let list = MODEL.recipes.filter((r) => {
+    const hay = (r.number + " " + r.kind + " " + (r.color || "")).toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
+  const q1 = words.length === 1 ? words[0] : null;
+  const rank = (r) => {
+    const n = r.number.toLowerCase();
+    if (q1 && n === q1) return 0;                 // точен номер
+    if (q1 && n.startsWith(q1)) return 1;         // номерът започва с търсеното
+    return isFavorite(r.number) ? 2 : 3;          // после любимите
+  };
+  // stable sort: при равен ранг се пази редът от таблицата
+  return list.map((r, i) => [rank(r), i, r]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]);
+}
+function renderPickList() {
+  const sel = _pickSel;
+  if (!sel) return;
+  const list = searchRecipes($("pickSearch").value);
+  const canClear = !!sel.querySelector('option[value=""]');
+  let html = "";
+  if (canClear && sel.value) html += `<button type="button" class="pick-item clear" data-num="">Без рецепта (изчисти реда)</button>`;
+  html += list.map((r) => `
+    <button type="button" class="pick-item${r.number === sel.value ? " current" : ""}" data-num="${escapeHtml(r.number)}">
+      <span class="pk-num">${escapeHtml(r.number)}</span>
+      <span class="pk-body">
+        <span class="pk-kind">${escapeHtml(r.kind)}</span>
+        <div class="pk-meta">${fmt(r.total, 2)} кг замес${r.color ? ", " + escapeHtml(r.color) : ""}</div>
+      </span>
+      ${isFavorite(r.number) ? '<span class="pk-fav">★</span>' : ""}
+    </button>`).join("");
+  if (!list.length) html += `<div class="empty">Няма рецепта с „${escapeHtml($("pickSearch").value.trim())}“.</div>`;
+  $("pickList").innerHTML = html;
+}
+function setupPicker() {
+  $("pickSearch").addEventListener("input", renderPickList);
+  $("pickSearch").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { const first = $("pickList").querySelector(".pick-item:not(.clear)"); if (first) first.click(); }
+  });
+  $("pickList").addEventListener("click", (e) => {
+    const item = e.target.closest(".pick-item");
+    if (!item || !_pickSel) return;
+    const sel = _pickSel;
+    sel.value = item.dataset.num;
+    refreshPicker(sel);
+    $("pickModal").classList.remove("open");
+    sel.dispatchEvent(new Event("change"));
+  });
+  $("pickModal").addEventListener("click", (e) => { if (e.target.id === "pickModal") $("pickModal").classList.remove("open"); });
+}
+
 function getRecipe(num) {
   return MODEL.recipes.find((r) => r.number === String(num));
 }
@@ -219,11 +332,7 @@ function setupCalc() {
     recalcCalc();
   }
   sel.addEventListener("change", () => { blockKgEdited = false; onRecipeChange(); });
-  $("calcRecipeSearch").addEventListener("input", () => {
-    fillRecipeSelect(sel, filterRecipes($("calcRecipeSearch").value));
-    blockKgEdited = false;
-    onRecipeChange();
-  });
+  attachPicker(sel);
   ["calcW", "calcH", "calcL", "calcPuls"].forEach((id) =>
     $(id).addEventListener("input", recalcCalc)
   );
@@ -390,13 +499,13 @@ function renderRecipeList() {
   list.innerHTML = filtered
     .map(
       (r) => `
-    <div class="recipe-card" data-num="${r.number}">
-      <div class="badge">${r.number}</div>
+    <div class="recipe-card" data-num="${escapeHtml(r.number)}">
+      <div class="badge">${escapeHtml(r.number)}</div>
       <div class="info">
-        <div class="kind">${r.kind}${r.index != null ? ` <span style="color:var(--text-faint);font-weight:400">· инд ${fmt(r.index, 1)}</span>` : ""}</div>
-        <div class="meta">${fmt(r.total, 2)} кг замес${r.color ? " · " + r.color : ""}</div>
+        <div class="kind">${escapeHtml(r.kind)}${r.index != null ? ` <span style="color:var(--text-faint);font-weight:400">инд. ${fmt(r.index, 1)}</span>` : ""}</div>
+        <div class="meta">${fmt(r.total, 2)} кг замес${r.color ? ", " + escapeHtml(r.color) : ""}</div>
       </div>
-      <button class="fav-btn ${isFavorite(r.number) ? "on" : ""}" data-fav="${r.number}" title="Любима">★</button>
+      <button class="fav-btn ${isFavorite(r.number) ? "on" : ""}" data-fav="${escapeHtml(r.number)}" title="Любима">★</button>
       <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
     </div>`
     )
@@ -496,10 +605,7 @@ function setupSimulator() {
   fillRecipeSelect(sel);
 
   sel.addEventListener("change", recalcSim);
-  $("simRecipeSearch").addEventListener("input", () => {
-    fillRecipeSelect(sel, filterRecipes($("simRecipeSearch").value));
-    recalcSim();
-  });
+  attachPicker(sel);
   $("simTarget").addEventListener("input", () => {
     syncChips();
     recalcSim();
@@ -602,7 +708,7 @@ function getLog() { try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []
 function setLog(arr) { localStorage.setItem(LOG_KEY, JSON.stringify(arr)); }
 function addLogFromCalc() {
   const rec = getRecipe($("calcRecipe").value);
-  if (!rec) { alert("Първо избери рецепта в таб Калкулатор."); return; }
+  if (!rec) { toast("Първо избери рецепта в Калкулатор."); return; }
   const w = valNum("calcW"), h = valNum("calcH"), l = valNum("calcL"), blockKg = valNum("calcBlockKg");
   const puls = Math.max(1, Math.round(valNum("calcPuls")) || 1);
   let density = null;
@@ -618,7 +724,7 @@ function addLogFromCalc() {
   log.unshift(entry);
   setLog(log);
   renderLog();
-  alert("Записано в дневника! Виж го в таб Дневник.");
+  toast("Записано в дневника.");
 }
 function renderLog() {
   const list = $("logList");
@@ -681,8 +787,8 @@ function setupMulti() {
   for (let i = 0; i < MULTI_ROWS; i++) {
     html += `<div class="multi-row">
       <span class="multi-idx">${i + 1}</span>
-      <select id="multiRec${i}" data-i="${i}"></select>
-      <input type="text" inputmode="decimal" id="multiCnt${i}" placeholder="0" />
+      <div><select id="multiRec${i}" data-i="${i}" aria-label="Рецепта на ред ${i + 1}"></select></div>
+      <input type="text" inputmode="decimal" id="multiCnt${i}" placeholder="0" aria-label="Брой пускове на ред ${i + 1}" />
     </div>`;
   }
   wrap.innerHTML = html;
@@ -704,15 +810,17 @@ function setupMulti() {
       onMultiChange();
     });
     $("multiCnt" + i).addEventListener("input", onMultiChange);
+    attachPicker(sel, "Избери рецепта");
   }
 
   if (!_multiBound) {
     _multiBound = true;
     $("multiClearBtn").addEventListener("click", () => {
       if (!confirm("Изчисти всички редове?")) return;
-      for (let i = 0; i < MULTI_ROWS; i++) { $("multiRec" + i).value = ""; $("multiCnt" + i).value = ""; }
+      for (let i = 0; i < MULTI_ROWS; i++) { $("multiRec" + i).value = ""; $("multiCnt" + i).value = ""; refreshPicker($("multiRec" + i)); }
       onMultiChange();
     });
+    $("multiDeductBtn").addEventListener("click", deductPlanFromStock);
     $("multiShareBtn").addEventListener("click", () => { const [t, b] = multiShareText(); if (t) shareText(t, b); });
   }
   recalcMulti();
@@ -728,6 +836,7 @@ function multiEntries() {
     const inp = $("multiCnt" + i);
     const bad = rec && (isNaN(cnt) || cnt <= 0) && inp.value.trim() !== "";
     inp.classList.toggle("invalid", !!bad);
+    inp.closest(".multi-row").classList.toggle("filled", !!rec);
     if (rec && !isNaN(cnt) && cnt > 0) out.push({ rec, cnt, row: i + 1 });
   }
   return out;
@@ -758,17 +867,36 @@ function recalcMulti() {
 
   // --- Общо за всички ---
   const totals = multiTotals(entries);
+  const stock = getStock();
+  const tracked = totals.some((t) => stock[matKey(t.name)] != null);
   let grand = 0;
-  let html = `<tr><th>Материал</th><th class="num">кг</th><th class="num">%</th></tr>`;
   totals.forEach((t) => { grand += t.kg; });
+  let html = `<tr><th>Материал</th><th class="num">Нужни кг</th><th class="num">${tracked ? "Остават" : "%"}</th></tr>`;
+  const shorts = [];
   totals.forEach((t) => {
-    const pct = grand > 0 ? (t.kg / grand) * 100 : 0;
-    html += `<tr><td class="name">${escapeHtml(t.name)}</td><td class="num val">${fmtKg(t.kg)}</td><td class="num" style="color:var(--text-dim)">${fmt(pct, 1)}</td></tr>`;
+    let third;
+    if (tracked) {
+      const have = stock[matKey(t.name)];
+      if (have == null) third = `<td class="num" style="color:var(--text-faint)">—</td>`;
+      else {
+        const left = have - t.kg;
+        if (left < -1e-9) { shorts.push(`${t.name} (${fmtKg(-left)} кг)`); third = `<td class="num short">−${fmtKg(-left)}</td>`; }
+        else third = `<td class="num ok">${fmtKg(left)}</td>`;
+      }
+    } else {
+      const pct = grand > 0 ? (t.kg / grand) * 100 : 0;
+      third = `<td class="num" style="color:var(--text-dim)">${fmt(pct, 1)}</td>`;
+    }
+    html += `<tr><td class="name">${escapeHtml(t.name)}</td><td class="num val">${fmtKg(t.kg)}</td>${third}</tr>`;
   });
   html += `<tr class="total"><td>Общо (кг)</td><td class="num val">${fmtKg(grand)}</td><td class="num"></td></tr>`;
   $("multiTotalTable").innerHTML = html;
+  const sh = $("multiShort");
+  sh.style.display = shorts.length ? "block" : "none";
+  sh.textContent = shorts.length ? "Не достигат в склада: " + shorts.join(", ") : "";
+  $("multiDeductBtn").style.display = tracked ? "" : "none";
   const totalCnt = entries.reduce((s, e) => s + e.cnt, 0);
-  $("multiTotalSub").textContent = `${entries.length} ${entries.length === 1 ? "рецепта" : "рецепти"} · ${fmt(totalCnt, totalCnt % 1 ? 1 : 0)} ${cntLabel(totalCnt)} общо`;
+  $("multiTotalSub").textContent = `${entries.length} ${entries.length === 1 ? "рецепта" : "рецепти"}, общо ${fmt(totalCnt, totalCnt % 1 ? 1 : 0)} ${cntLabel(totalCnt)}`;
 
   let costAll = 0, anyCost = false;
   entries.forEach(({ rec, cnt }) => {
@@ -792,7 +920,7 @@ function recalcMulti() {
     return `<details class="card multi-rec">
       <summary>
         <span class="multi-rec-title"><span class="multi-idx">${row}</span>№${escapeHtml(rec.number)} — ${escapeHtml(rec.kind)}</span>
-        <span class="multi-rec-sum">${fmt(cnt, cnt % 1 ? 1 : 0)} ${cntLabel(cnt)} · ${fmtKg(s1 * cnt)} кг${cost != null ? " · " + fmt(cost, 2) + " €" : ""}</span>
+        <span class="multi-rec-sum">${fmt(cnt, cnt % 1 ? 1 : 0)} ${cntLabel(cnt)}, ${fmtKg(s1 * cnt)} кг${cost != null ? ", " + fmt(cost, 2) + " €" : ""}</span>
       </summary>
       <table class="mat-table" style="margin-top:8px;">${t}</table>
     </details>`;
@@ -819,6 +947,175 @@ function multiShareText() {
   return ["Сборен калкулатор — материали", lines.join("\n")];
 }
 
+// ====== ТАБ: Склад / наличности (запазени локално, в кг) ======
+const STOCK_KEY = "pu_foam_stock_v1";
+function getStock() {
+  try {
+    const s = JSON.parse(localStorage.getItem(STOCK_KEY));
+    if (s && typeof s === "object" && !Array.isArray(s)) return s;
+  } catch (e) {}
+  return {};
+}
+function setStock(obj) { localStorage.setItem(STOCK_KEY, JSON.stringify(obj)); }
+// Всички суровини от рецептите, без повторения (имена с двойни интервали се обединяват)
+function stockMaterials() {
+  const map = new Map();
+  MODEL.recipes.forEach((r) => r.components.forEach((c) => {
+    const k = matKey(c.name);
+    if (!map.has(k)) map.set(k, String(c.name).replace(/\s+/g, " ").trim());
+  }));
+  return [...map.entries()].map(([key, name]) => ({ key, name })).sort((a, b) => a.name.localeCompare(b.name, "bg"));
+}
+function numToField(n) { return String(Math.round(n * 1000) / 1000).replace(".", ","); }
+
+let _stockMats = [];
+function setupStock() {
+  _stockMats = stockMaterials();
+  const stock = getStock();
+  $("stockList").innerHTML = _stockMats.map((m, i) => `
+    <div class="stock-row" data-i="${i}">
+      <div class="stock-main">
+        <label class="stock-name" for="stockIn${i}">${escapeHtml(m.name)}</label>
+        <input type="text" inputmode="decimal" id="stockIn${i}" placeholder="кг" value="${stock[m.key] != null ? numToField(stock[m.key]) : ""}" />
+        <button type="button" class="stock-add-btn" data-add="${i}" title="Добави доставка" aria-label="Добави доставка за ${escapeHtml(m.name)}">+</button>
+      </div>
+      <div class="stock-add" id="stockAdd${i}" hidden>
+        <input type="text" inputmode="decimal" id="stockAddIn${i}" placeholder="Доставка, кг" />
+        <button type="button" class="btn" data-addok="${i}">Добави</button>
+      </div>
+      <div class="stock-note" id="stockNote${i}"></div>
+    </div>`).join("") || `<div class="empty">Няма суровини в рецептите.</div>`;
+
+  const list = $("stockList");
+  if (!list._bound) {
+    list._bound = true;
+    list.addEventListener("input", (e) => {
+      const m = /^stockIn(\d+)$/.exec(e.target.id || "");
+      if (!m) return;
+      const i = +m[1], st = getStock(), raw = e.target.value.trim(), v = parseNum(raw);
+      const bad = raw !== "" && isNaN(v);
+      e.target.classList.toggle("invalid", bad);
+      if (bad) return;
+      if (raw === "") delete st[_stockMats[i].key]; else st[_stockMats[i].key] = v;
+      setStock(st);
+      recalcStock();
+    });
+    list.addEventListener("click", (e) => {
+      const add = e.target.closest("[data-add]");
+      if (add) {
+        const box = $("stockAdd" + add.dataset.add);
+        box.hidden = !box.hidden;
+        if (!box.hidden) $("stockAddIn" + add.dataset.add).focus();
+        return;
+      }
+      const ok = e.target.closest("[data-addok]");
+      if (ok) addDelivery(+ok.dataset.addok);
+    });
+    list.addEventListener("keydown", (e) => {
+      const m = /^stockAddIn(\d+)$/.exec(e.target.id || "");
+      if (m && e.key === "Enter") addDelivery(+m[1]);
+    });
+    $("stockShareBtn").addEventListener("click", () => { const [t, b] = stockShareText(); if (t) shareText(t, b); else toast("Нищо не достига за плана."); });
+  }
+  recalcStock();
+}
+function addDelivery(i) {
+  const inp = $("stockAddIn" + i);
+  const v = parseNum(inp.value);
+  if (isNaN(v) || v <= 0) { inp.classList.add("invalid"); return; }
+  inp.classList.remove("invalid");
+  const st = getStock(), k = _stockMats[i].key;
+  st[k] = (st[k] || 0) + v;
+  setStock(st);
+  $("stockIn" + i).value = numToField(st[k]);
+  $("stockIn" + i).classList.remove("invalid");
+  inp.value = "";
+  $("stockAdd" + i).hidden = true;
+  recalcStock();
+  toast(`Добавени ${fmtKg(v)} кг ${_stockMats[i].name}.`);
+}
+// Нужни количества по плана от „Сборен“: { ключ: кг }
+function planNeeds() {
+  const need = {};
+  if (!$("multiRec0")) return need;
+  multiTotals(multiEntries()).forEach((t) => { need[matKey(t.name)] = t.kg; });
+  return need;
+}
+// Суровини, които не достигат за плана: [{name, need, have, short}]
+function stockShortages() {
+  const st = getStock(), need = planNeeds();
+  return _stockMats
+    .filter((m) => need[m.key] != null && st[m.key] != null && st[m.key] - need[m.key] < -1e-9)
+    .map((m) => ({ name: m.name, need: need[m.key], have: st[m.key], short: need[m.key] - st[m.key] }));
+}
+function recalcStock() {
+  if (!$("stockIn0") && _stockMats.length) return;
+  const st = getStock(), need = planNeeds();
+  const hasPlan = Object.keys(need).length > 0;
+  let untracked = 0;
+  _stockMats.forEach((m, i) => {
+    const note = $("stockNote" + i);
+    if (!note) return;
+    const n = need[m.key], have = st[m.key];
+    note.className = "stock-note";
+    if (n == null) { note.textContent = ""; return; }
+    if (have == null) { untracked++; note.textContent = `За плана трябват ${fmtKg(n)} кг`; return; }
+    const left = have - n;
+    if (left < -1e-9) { note.classList.add("short"); note.textContent = `За плана трябват ${fmtKg(n)} кг, не достигат ${fmtKg(-left)} кг`; }
+    else { note.classList.add("ok"); note.textContent = `За плана трябват ${fmtKg(n)} кг, остават ${fmtKg(left)} кг`; }
+  });
+
+  const box = $("stockSummary");
+  const shorts = stockShortages();
+  if (!hasPlan) {
+    box.innerHTML = `<h3 class="card-title">Няма план за сравнение</h3><div class="card-sub" style="margin:0;">Попълни рецепти и брой в „Сборен“ и тук ще видиш какво не достига.</div>`;
+  } else if (shorts.length) {
+    let t = `<tr><th>Суровина</th><th class="num">Има</th><th class="num">Трябват</th><th class="num">Не достигат</th></tr>`;
+    shorts.forEach((x) => { t += `<tr><td class="name">${escapeHtml(x.name)}</td><td class="num">${fmtKg(x.have)}</td><td class="num">${fmtKg(x.need)}</td><td class="num short">${fmtKg(x.short)}</td></tr>`; });
+    box.innerHTML = `<h3 class="card-title">${shorts.length === 1 ? "Не достига 1 суровина" : "Не достигат " + shorts.length + " суровини"} за плана</h3><div class="card-sub">Количества в кг, спрямо плана от „Сборен“.</div><table class="mat-table">${t}</table>`;
+  } else {
+    box.innerHTML = `<h3 class="card-title">Наличностите стигат за плана</h3><p class="ok-line">Всички следени суровини покриват плана от „Сборен“.</p>`;
+  }
+  if (hasPlan && untracked) box.innerHTML += `<p class="hint">${untracked} ${untracked === 1 ? "суровина от плана няма" : "суровини от плана нямат"} въведена наличност и не се ${untracked === 1 ? "проверява" : "проверяват"}.</p>`;
+}
+function stockShareText() {
+  const shorts = stockShortages();
+  if (!shorts.length) return ["", ""];
+  const lines = shorts.map((x) => `${x.name}: ${fmtKg(x.short)} кг (има ${fmtKg(x.have)}, трябват ${fmtKg(x.need)})`);
+  return ["Списък за поръчка — не достигат за плана", lines.join("\n")];
+}
+// Изважда плана от „Сборен“ от наличностите (само за следените суровини)
+function deductPlanFromStock() {
+  const need = planNeeds(), st = getStock();
+  const keys = Object.keys(need).filter((k) => st[k] != null);
+  if (!keys.length) { toast("Няма следени суровини в този план."); return; }
+  if (!confirm(`Приспадни плана от склада?\nЩе се намалят наличностите на ${keys.length} ${keys.length === 1 ? "суровина" : "суровини"}.`)) return;
+  // Наличността не пада под нула
+  keys.forEach((k) => { st[k] = Math.max(0, Math.round((st[k] - need[k]) * 1000) / 1000); });
+  setStock(st);
+  _stockMats.forEach((m, i) => { const inp = $("stockIn" + i); if (inp && st[m.key] != null) inp.value = numToField(st[m.key]); });
+  recalcMulti();
+  recalcStock();
+  toast("Планът е приспаднат от склада.");
+}
+
+// ====== Печат / PDF на текущия таб ======
+let _printOpened = [];
+function printTab() {
+  const d = new Date().toLocaleString("bg-BG", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  $("printHead").innerHTML = `<b>${escapeHtml(currentTabTitle())}</b><span>ПУ Пяна, ${d}</span>`;
+  window.print();
+}
+function setupPrint() {
+  document.querySelectorAll("[data-print]").forEach((b) => b.addEventListener("click", printTab));
+  // При печат разгъваме картите на отделните рецепти, после ги връщаме
+  window.addEventListener("beforeprint", () => {
+    _printOpened = [...document.querySelectorAll(".tab-page.active details:not([open])")];
+    _printOpened.forEach((x) => { x.open = true; });
+  });
+  window.addEventListener("afterprint", () => { _printOpened.forEach((x) => { x.open = false; }); _printOpened = []; });
+}
+
 // ====== Помощ / Безопасност (бележки от листа Notes) ======
 function renderHelp() {
   const list = $("helpList");
@@ -838,11 +1135,14 @@ function renderAll() {
   setupAmine();
   setupSimulator();
   setupMulti();
+  setupStock();
   renderLog();
 }
 
 async function init() {
   setupNav();
+  setupPicker();
+  setupPrint();
 
   const syncBtn = $("syncBtn");
   async function doLoad() {
@@ -887,10 +1187,26 @@ async function init() {
   await doLoad();
 }
 
-// Регистрация на service worker
+// Регистрация на service worker + известие за нова версия
+function showUpdateBar() { $("updateBar").hidden = false; }
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch((e) => console.warn("SW грешка:", e));
+  window.addEventListener("load", async () => {
+    $("updateBtn").addEventListener("click", () => location.reload());
+    try {
+      // Ако вече има активен worker, всяка следваща инсталация е обновяване
+      const hadController = !!navigator.serviceWorker.controller;
+      const reg = await navigator.serviceWorker.register("sw.js");
+      const watch = (w) => {
+        if (!w) return;
+        w.addEventListener("statechange", () => { if (w.state === "activated" && hadController) showUpdateBar(); });
+      };
+      watch(reg.installing);
+      reg.addEventListener("updatefound", () => watch(reg.installing));
+      // Проверка за нова версия при връщане в приложението
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") reg.update().catch(() => {});
+      });
+    } catch (e) { console.warn("SW грешка:", e); }
   });
 }
 
