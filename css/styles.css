@@ -77,6 +77,7 @@ button { touch-action: manipulation; }
   cursor: pointer;
 }
 .icon-btn:hover { color: var(--text); border-color: var(--border-strong); }
+.lang-btn { font-size: 13px; font-weight: 750; letter-spacing: 0.5px; font-family: inherit; }
 .icon-btn:active { transform: scale(0.95); }
 .icon-btn.spinning .ic { animation: spin 0.9s linear infinite; }
 .icon-btn.toggle-on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
