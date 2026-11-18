@@ -5,21 +5,21 @@ let MODEL = null;
 const $ = (id) => document.getElementById(id);
 function fmt(n, dec = 3) {
   if (n == null || isNaN(n)) return "—";
-  return n.toLocaleString("bg-BG", {
+  return n.toLocaleString(LOC(), {
     minimumFractionDigits: dec,
     maximumFractionDigits: dec,
   });
 }
 function fmtInt(n) {
   if (n == null || isNaN(n)) return "—";
-  return Math.round(n).toLocaleString("bg-BG");
+  return Math.round(n).toLocaleString(LOC());
 }
 // Адаптивно форматиране на килограми: по-големите стойности с по-малко
 // десетични знаци, за да не стават числата прекалено широки на тесен екран.
 function fmtKg(n) {
   if (n == null || isNaN(n)) return "—";
   const dec = n >= 100 ? 1 : n >= 10 ? 2 : 3;
-  return n.toLocaleString("bg-BG", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  return n.toLocaleString(LOC(), { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 // Чете числова стойност от поле; връща NaN ако е празно/невалидно
 function valNum(id) {
@@ -53,9 +53,7 @@ function setupNav() {
   });
   $("navMore").addEventListener("click", () => $("moreModal").classList.add("open"));
   $("moreModal").addEventListener("click", (e) => { if (e.target.id === "moreModal") $("moreModal").classList.remove("open"); });
-  const v = "Версия " + APP_VERSION;
-  $("navVersion").textContent = v;
-  $("moreVersion").textContent = v;
+  renderVersion();
   let saved = null;
   try { saved = localStorage.getItem(TAB_KEY); } catch (e) {}
   showTab(saved);
@@ -76,19 +74,21 @@ function toast(msg) {
 }
 
 // ====== Статус на синхронизация ======
+let _sync = ["connecting", null];
 function setSyncStatus(state, ts) {
+  _sync = [state, ts];
   const el = $("syncStatus");
   el.className = "sync-status " + state;
   if (state === "live") {
-    const t = ts ? new Date(ts).toLocaleTimeString("bg-BG", { hour: "2-digit", minute: "2-digit" }) : "";
-    el.textContent = `● Актуални данни${t ? " · " + t : ""}`;
+    const t = ts ? new Date(ts).toLocaleTimeString(LOC(), { hour: "2-digit", minute: "2-digit" }) : "";
+    el.textContent = window.t("● Актуални данни") + (t ? " · " + t : "");
   } else if (state === "cache") {
-    const t = ts ? new Date(ts).toLocaleString("bg-BG") : "неизвестно";
-    el.textContent = `⚠ Офлайн · данни от ${t}`;
+    const d = ts ? new Date(ts).toLocaleString(LOC()) : t("неизвестно");
+    el.textContent = t("⚠ Офлайн · данни от {0}", d);
   } else if (state === "error") {
-    el.textContent = "✕ Няма данни. Провери интернета.";
+    el.textContent = t("✕ Няма данни. Провери интернета.");
   } else {
-    el.textContent = "Свързване…";
+    el.textContent = t("Свързване…");
   }
 }
 
@@ -123,9 +123,9 @@ async function toggleWakeLock() {
     if (wakeLock) { try { await wakeLock.release(); } catch (e) {} wakeLock = null; }
     btn.classList.remove("toggle-on");
   } else {
-    if (!("wakeLock" in navigator)) { toast("Браузърът не поддържа задържане на екрана."); return; }
-    if (await requestWake()) { wakeWanted = true; btn.classList.add("toggle-on"); toast("Екранът ще стои включен."); }
-    else toast("Екранът не може да се задържи включен.");
+    if (!("wakeLock" in navigator)) { toast(t("Браузърът не поддържа задържане на екрана.")); return; }
+    if (await requestWake()) { wakeWanted = true; btn.classList.add("toggle-on"); toast(t("Екранът ще стои включен.")); }
+    else toast(t("Екранът не може да се задържи включен."));
   }
 }
 
@@ -159,7 +159,7 @@ function openPricesModal() {
     .map((n, i) => `
       <div class="field" style="margin-bottom:8px;">
         <label class="lbl">${escapeHtml(n)}</label>
-        <input type="text" inputmode="decimal" data-idx="${i}" value="${prices[n] != null ? String(prices[n]).replace(".", ",") : ""}" placeholder="€/кг" />
+        <input type="text" inputmode="decimal" data-idx="${i}" value="${prices[n] != null ? String(prices[n]).replace(".", ",") : ""}" placeholder="${t("€/кг")}" />
       </div>`)
     .join("");
   $("pricesModal").classList.add("open");
@@ -175,21 +175,21 @@ function savePrices() {
   recalcCalc();
   recalcSim();
   if (MODEL && $("multiRec0")) recalcMulti();
-  toast("Цените са запазени.");
+  toast(t("Цените са запазени."));
 }
 
 // ====== Споделяне / копиране на текст ======
 async function shareText(title, body) {
-  const full = title + "\n\n" + body + "\n\n— ПУ Пяна асистент";
+  const full = title + "\n\n" + body + "\n\n" + t("— ПУ Пяна асистент");
   if (navigator.share) {
     try { await navigator.share({ title, text: full }); return; }
     catch (e) { if (e.name === "AbortError") return; }
   }
   try {
     await navigator.clipboard.writeText(full);
-    toast("Копирано. Постави го в съобщение или бележка.");
+    toast(t("Копирано. Постави го в съобщение или бележка."));
   } catch (e) {
-    prompt("Копирай текста:", full);
+    prompt(t("Копирай текста:"), full);
   }
 }
 
@@ -201,7 +201,7 @@ function fillRecipeSelect(sel, recipes) {
   sel.innerHTML = "";
   if (!list.length) {
     const o = document.createElement("option");
-    o.value = ""; o.textContent = "няма съвпадение";
+    o.value = ""; o.textContent = t("няма съвпадение");
     sel.appendChild(o);
     return;
   }
@@ -238,7 +238,7 @@ function refreshPicker(sel) {
   const chev = `<svg class="pk-chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>`;
   b.innerHTML = rec
     ? `<span class="pk-num">${escapeHtml(rec.number)}</span><span class="pk-kind">${escapeHtml(rec.kind)}</span>${chev}`
-    : `<span class="pk-kind">${escapeHtml(sel._ph)}</span>${chev}`;
+    : `<span class="pk-kind">${escapeHtml(t(sel._ph))}</span>${chev}`;
 }
 function openPicker(sel) {
   _pickSel = sel;
@@ -272,17 +272,17 @@ function renderPickList() {
   const list = searchRecipes($("pickSearch").value);
   const canClear = !!sel.querySelector('option[value=""]');
   let html = "";
-  if (canClear && sel.value) html += `<button type="button" class="pick-item clear" data-num="">Без рецепта (изчисти реда)</button>`;
+  if (canClear && sel.value) html += `<button type="button" class="pick-item clear" data-num="">${t("Без рецепта (изчисти реда)")}</button>`;
   html += list.map((r) => `
     <button type="button" class="pick-item${r.number === sel.value ? " current" : ""}" data-num="${escapeHtml(r.number)}">
       <span class="pk-num">${escapeHtml(r.number)}</span>
       <span class="pk-body">
         <span class="pk-kind">${escapeHtml(r.kind)}</span>
-        <div class="pk-meta">${fmt(r.total, 2)} кг замес${r.color ? ", " + escapeHtml(r.color) : ""}</div>
+        <div class="pk-meta">${t("{0} кг замес", fmt(r.total, 2))}${r.color ? ", " + escapeHtml(r.color) : ""}</div>
       </span>
       ${isFavorite(r.number) ? '<span class="pk-fav">★</span>' : ""}
     </button>`).join("");
-  if (!list.length) html += `<div class="empty">Няма рецепта с „${escapeHtml($("pickSearch").value.trim())}“.</div>`;
+  if (!list.length) html += `<div class="empty">${t("Няма рецепта с „{0}“.", escapeHtml($("pickSearch").value.trim()))}</div>`;
   $("pickList").innerHTML = html;
 }
 function setupPicker() {
@@ -353,7 +353,7 @@ function recalcCalc() {
   const ih = $("calcIndexHint");
   if (rec.index != null) {
     const danger = rec.index > 120;
-    ih.innerHTML = `TDI индекс: <b style="color:${danger ? "var(--red)" : "var(--green)"}">${fmt(rec.index, 1)}</b>` + (danger ? " ⚠ опасно високо!" : "");
+    ih.innerHTML = `${t("TDI индекс")}: <b style="color:${danger ? "var(--red)" : "var(--green)"}">${fmt(rec.index, 1)}</b>` + (danger ? t(" ⚠ опасно високо!") : "");
     ih.style.display = "block";
   } else {
     ih.style.display = "none";
@@ -376,7 +376,7 @@ function recalcCalc() {
 
   // Таблица материали: на пуск и общо
   const tbl = $("calcMatTable");
-  let html = `<tr><th>Материал</th><th class="num">гр/RPM</th><th class="num">RPM</th><th class="num">1 пуск</th><th class="num">× ${puls}</th></tr>`;
+  let html = `<tr><th>${t("Материал")}</th><th class="num">${t("гр/RPM")}</th><th class="num">RPM</th><th class="num">${t("1 пуск")}</th><th class="num">× ${puls}</th></tr>`;
   let sum1 = 0, sumAll = 0;
   rec.components.forEach((c) => {
     sum1 += c.kg;
@@ -388,7 +388,7 @@ function recalcCalc() {
     const rpmStr = rpm != null ? `<b style="color:var(--blue)">${fmtInt(rpm)}</b>` : "—";
     html += `<tr><td class="name">${c.name}</td><td class="num" style="color:var(--text-dim)">${calStr}</td><td class="num">${rpmStr}</td><td class="num val">${fmt(c.kg)}</td><td class="num val">${fmt(c.kg * puls)}</td></tr>`;
   });
-  html += `<tr class="total"><td>Общо (кг)</td><td class="num"></td><td class="num"></td><td class="num val">${fmt(sum1)}</td><td class="num val">${fmt(sumAll)}</td></tr>`;
+  html += `<tr class="total"><td>${t("Общо (кг)")}</td><td class="num"></td><td class="num"></td><td class="num val">${fmt(sum1)}</td><td class="num val">${fmt(sumAll)}</td></tr>`;
   tbl.innerHTML = html;
   $("calcMatCard").style.display = "block";
 
@@ -397,7 +397,7 @@ function recalcCalc() {
   const costCard = $("calcCostCard");
   if (cost1 != null) {
     $("calcCost1").textContent = fmt(cost1, 2) + " €";
-    $("calcCostNlabel").textContent = `За ${puls} ${puls === 1 ? "пуск" : "пуска"}`;
+    $("calcCostNlabel").textContent = t("За {0} {1}", puls, cntLabel(puls));
     $("calcCostN").textContent = fmt(cost1 * puls, 2) + " €";
     costCard.style.display = "block";
   } else {
@@ -450,16 +450,16 @@ function recalcCal() {
     const rpm = valNum("calRpm");
     if (isNaN(rpm)) { card.style.display = "none"; return; }
     const grams = rpm * coeff;
-    $("calResLabel").textContent = "Количество (грамове)";
-    $("calResVal").textContent = fmtInt(grams) + " гр";
-    $("calResKg").textContent = fmt(grams / 1000) + " кг";
+    $("calResLabel").textContent = t("Количество (грамове)");
+    $("calResVal").textContent = fmtInt(grams) + " " + t("гр");
+    $("calResKg").textContent = fmt(grams / 1000) + " " + t("кг");
   } else {
     const grams = valNum("calGrams");
     if (isNaN(grams)) { card.style.display = "none"; return; }
     const rpm = grams / coeff;
-    $("calResLabel").textContent = "Необходими обороти";
+    $("calResLabel").textContent = t("Необходими обороти");
     $("calResVal").textContent = fmtInt(rpm) + " RPM";
-    $("calResKg").textContent = fmt(grams / 1000) + " кг";
+    $("calResKg").textContent = fmt(grams / 1000) + " " + t("кг");
   }
   card.style.display = "block";
 }
@@ -493,7 +493,7 @@ function renderRecipeList() {
     );
   });
   if (!filtered.length) {
-    list.innerHTML = `<div class="empty">${onlyFav ? "Нямаш любими рецепти още." : "Няма намерени рецепти."}</div>`;
+    list.innerHTML = `<div class="empty">${onlyFav ? t("Нямаш любими рецепти още.") : t("Няма намерени рецепти.")}</div>`;
     return;
   }
   list.innerHTML = filtered
@@ -502,10 +502,10 @@ function renderRecipeList() {
     <div class="recipe-card" data-num="${escapeHtml(r.number)}">
       <div class="badge">${escapeHtml(r.number)}</div>
       <div class="info">
-        <div class="kind">${escapeHtml(r.kind)}${r.index != null ? ` <span style="color:var(--text-faint);font-weight:400">инд. ${fmt(r.index, 1)}</span>` : ""}</div>
-        <div class="meta">${fmt(r.total, 2)} кг замес${r.color ? ", " + escapeHtml(r.color) : ""}</div>
+        <div class="kind">${escapeHtml(r.kind)}${r.index != null ? ` <span style="color:var(--text-faint);font-weight:400">${t("инд.")} ${fmt(r.index, 1)}</span>` : ""}</div>
+        <div class="meta">${t("{0} кг замес", fmt(r.total, 2))}${r.color ? ", " + escapeHtml(r.color) : ""}</div>
       </div>
-      <button class="fav-btn ${isFavorite(r.number) ? "on" : ""}" data-fav="${escapeHtml(r.number)}" title="Любима">★</button>
+      <button class="fav-btn ${isFavorite(r.number) ? "on" : ""}" data-fav="${escapeHtml(r.number)}" title="${t("Любима")}">★</button>
       <svg class="chev" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
     </div>`
     )
@@ -529,10 +529,10 @@ function openRecipeModal(num) {
   if (!rec) return;
   $("recModalTitle").textContent = `№${rec.number} — ${rec.kind}`;
   $("recModalSub").textContent =
-    `Общо Смес: ${fmt(rec.total, 2)} кг` +
-    (rec.color ? ` · Боя: ${rec.color}` : "") +
-    (rec.index != null ? ` · TDI индекс: ${fmt(rec.index, 1)}` : "");
-  let html = `<tr><th>Компонент</th><th class="num">за 1 кг</th><th class="num">кг</th><th class="num">RPM</th></tr>`;
+    t("Общо Смес: {0} кг", fmt(rec.total, 2)) +
+    (rec.color ? " · " + t("Боя: {0}", rec.color) : "") +
+    (rec.index != null ? ` · ${t("TDI индекс")}: ${fmt(rec.index, 1)}` : "");
+  let html = `<tr><th>${t("Компонент")}</th><th class="num">${t("за 1 кг")}</th><th class="num">${t("кг")}</th><th class="num">RPM</th></tr>`;
   let sumNorm = 0;
   rec.components.forEach((c) => {
     // Разходна норма: колко кг суровина се влагат за 1 кг от рецептата (замеса)
@@ -547,7 +547,7 @@ function openRecipeModal(num) {
     const rpmStr = rpm != null ? `<b style="color:var(--blue)">${fmtInt(rpm)}</b>` : "—";
     html += `<tr><td class="name">${c.name}</td><td class="num" style="color:var(--text-dim)">${fmt(norm, 6)}</td><td class="num val">${fmt(c.kg)}</td><td class="num">${rpmStr}</td></tr>`;
   });
-  html += `<tr class="total"><td>Общо</td><td class="num" style="color:var(--text-dim)">${fmt(sumNorm, 6)}</td><td class="num val">${fmt(rec.total, 2)}</td><td class="num"></td></tr>`;
+  html += `<tr class="total"><td>${t("Общо")}</td><td class="num" style="color:var(--text-dim)">${fmt(sumNorm, 6)}</td><td class="num val">${fmt(rec.total, 2)}</td><td class="num"></td></tr>`;
   $("recModalTable").innerHTML = html;
   $("recModal").classList.add("open");
 }
@@ -557,7 +557,7 @@ function closeRecipeModal() {
 
 // ====== ТАБ 4: 33LV ======
 function setupAmine() {
-  $("amineCoeffShow").textContent = fmt(MODEL.amineCoeff, 4) + " гр/пулс";
+  $("amineCoeffShow").textContent = fmt(MODEL.amineCoeff, 4) + " " + t("гр/пулс");
   $("amineCoeffInput").value = String(MODEL.amineCoeff).replace(".", ",");
 
   $("amineCoeffInput").addEventListener("input", recalcAmine);
@@ -585,16 +585,16 @@ function recalcAmine() {
     const pulses = valNum("aminePulses");
     if (isNaN(pulses)) { row.style.display = "none"; diff.textContent = ""; return; }
     const grams = pulses * coeff;
-    $("amineResLabel").textContent = "Грамове";
-    $("amineResVal").textContent = fmt(grams, 3) + " гр";
-    diff.textContent = `${fmtInt(pulses)} пулса × ${fmt(coeff, 4)} гр/пулс`;
+    $("amineResLabel").textContent = t("Грамове");
+    $("amineResVal").textContent = fmt(grams, 3) + " " + t("гр");
+    diff.textContent = `${fmtInt(pulses)} ${t("пулса")} × ${fmt(coeff, 4)} ${t("гр/пулс")}`;
   } else {
     const grams = valNum("amineGrams");
     if (isNaN(grams)) { row.style.display = "none"; diff.textContent = ""; return; }
     const pulses = grams / coeff;
-    $("amineResLabel").textContent = "Пулсове";
-    $("amineResVal").textContent = fmt(pulses, 1) + " пулса";
-    diff.textContent = `${fmt(grams, 1)} гр ÷ ${fmt(coeff, 4)} гр/пулс`;
+    $("amineResLabel").textContent = t("Пулсове");
+    $("amineResVal").textContent = fmt(pulses, 1) + " " + t("пулса");
+    diff.textContent = `${fmt(grams, 1)} ${t("гр")} ÷ ${fmt(coeff, 4)} ${t("гр/пулс")}`;
   }
   row.style.display = "flex";
 }
@@ -657,14 +657,14 @@ function recalcSim() {
     $("simK").textContent = (pct >= 0 ? "+" : "") + fmt(pct, 1) + "%  (× " + fmt(K, 4) + ")";
   }
 
-  let html = `<tr><th>Материал</th><th class="num">грамове</th><th class="num">кг</th></tr>`;
+  let html = `<tr><th>${t("Материал")}</th><th class="num">${t("грамове")}</th><th class="num">${t("кг")}</th></tr>`;
   let sum = 0;
   rec.components.forEach((c) => {
     const g = c.kg * 1000 * K;
     sum += g;
     html += `<tr><td class="name">${c.name}</td><td class="num val">${fmt(g, 1)}</td><td class="num">${fmt(g / 1000, 4)}</td></tr>`;
   });
-  html += `<tr class="total"><td>Общо</td><td class="num val">${fmt(sum, 1)}</td><td class="num">${fmt(sum / 1000, 3)}</td></tr>`;
+  html += `<tr class="total"><td>${t("Общо")}</td><td class="num val">${fmt(sum, 1)}</td><td class="num">${fmt(sum / 1000, 3)}</td></tr>`;
   $("simTable").innerHTML = html;
   card.style.display = "block";
 }
@@ -675,16 +675,16 @@ function calcShareText() {
   if (!rec) return ["", ""];
   const puls = Math.max(1, Math.round(valNum("calcPuls")) || 1);
   const lines = [];
-  if (rec.index != null) lines.push(`TDI индекс: ${fmt(rec.index, 1)}`);
-  lines.push(`Брой пускове: ${puls}`, "");
+  if (rec.index != null) lines.push(`${t("TDI индекс")}: ${fmt(rec.index, 1)}`);
+  lines.push(t("Брой пускове: {0}", puls), "");
   rec.components.forEach((c) => {
     let rpm = c.rpm;
     if (rpm == null) { const cal = calibForMaterial(c.name); if (cal) rpm = (c.kg * 1000) / cal; }
-    lines.push(`${c.name}: ${rpm != null ? fmtInt(rpm) + " об" : "—"} | ${fmt(c.kg)} кг/пуск`);
+    lines.push(`${c.name}: ${rpm != null ? fmtInt(rpm) + " " + t("об") : "—"} | ${fmt(c.kg)} ${t("кг/пуск")}`);
   });
   const cost = costOf(rec.components, puls);
-  if (cost != null) lines.push("", `Себестойност (${puls} пуска): ${fmt(cost, 2)} €`);
-  return [`Рецепта №${rec.number} — ${rec.kind}`, lines.join("\n")];
+  if (cost != null) lines.push("", t("Себестойност ({0} пуска): {1} €", puls, fmt(cost, 2)));
+  return [t("Рецепта №{0} — {1}", rec.number, rec.kind), lines.join("\n")];
 }
 function simShareText() {
   const rec = getRecipe($("simRecipe").value);
@@ -693,9 +693,9 @@ function simShareText() {
   const lines = [];
   for (let i = 1; i < rows.length; i++) {
     const c = rows[i].cells;
-    lines.push(`${c[0].textContent}: ${c[1].textContent} гр`);
+    lines.push(`${c[0].textContent}: ${c[1].textContent} ${t("гр")}`);
   }
-  return [`Тестов блок — Рецепта №${rec.number} (${rec.kind})`, lines.join("\n")];
+  return [t("Тестов блок — Рецепта №{0} ({1})", rec.number, rec.kind), lines.join("\n")];
 }
 
 function escapeHtml(s) {
@@ -708,7 +708,7 @@ function getLog() { try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []
 function setLog(arr) { localStorage.setItem(LOG_KEY, JSON.stringify(arr)); }
 function addLogFromCalc() {
   const rec = getRecipe($("calcRecipe").value);
-  if (!rec) { toast("Първо избери рецепта в Калкулатор."); return; }
+  if (!rec) { toast(t("Първо избери рецепта в Калкулатор.")); return; }
   const w = valNum("calcW"), h = valNum("calcH"), l = valNum("calcL"), blockKg = valNum("calcBlockKg");
   const puls = Math.max(1, Math.round(valNum("calcPuls")) || 1);
   let density = null;
@@ -724,31 +724,31 @@ function addLogFromCalc() {
   log.unshift(entry);
   setLog(log);
   renderLog();
-  toast("Записано в дневника.");
+  toast(t("Записано в дневника."));
 }
 function renderLog() {
   const list = $("logList");
   if (!list) return;
   const log = getLog();
-  if (!log.length) { list.innerHTML = `<div class="empty">Няма записи още.</div>`; return; }
+  if (!log.length) { list.innerHTML = `<div class="empty">${t("Няма записи още.")}</div>`; return; }
   list.innerHTML = log.map((e) => {
     const d = new Date(e.ts);
-    const dateStr = d.toLocaleString("bg-BG", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-    const dims = e.w && e.h && e.l ? `${fmt(e.w, 0)}×${fmt(e.h, 0)}×${fmt(e.l, 0)} см` : "—";
+    const dateStr = d.toLocaleString(LOC(), { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    const dims = e.w && e.h && e.l ? `${fmt(e.w, 0)}×${fmt(e.h, 0)}×${fmt(e.l, 0)} ${t("см")}` : "—";
     return `<div class="log-item">
       <div class="log-head">
         <span class="log-recipe">№${e.num} — ${escapeHtml(e.kind)}</span>
         <span class="log-date">${dateStr}</span>
       </div>
       <div class="log-body">
-        Размери: ${dims} · Тегло: ${e.blockKg != null ? fmt(e.blockKg, 2) + " кг" : "—"} · Пускове: ${e.puls}<br>
-        Плътност: <span class="log-dens">${e.density != null ? fmt(e.density, 2) + " кг/м³" : "—"}</span>
+        ${t("Размери")}: ${dims} · ${t("Тегло")}: ${e.blockKg != null ? fmt(e.blockKg, 2) + " " + t("кг") : "—"} · ${t("Пускове")}: ${e.puls}<br>
+        ${t("Плътност")}: <span class="log-dens">${e.density != null ? fmt(e.density, 2) + " " + t("кг") + "/м³" : "—"}</span>
       </div>
-      <button class="log-del" data-ts="${e.ts}">Изтрий</button>
+      <button class="log-del" data-ts="${e.ts}">${t("Изтрий")}</button>
     </div>`;
   }).join("");
   list.querySelectorAll(".log-del").forEach((b) => b.addEventListener("click", () => {
-    if (confirm("Изтрий този запис?")) { setLog(getLog().filter((e) => String(e.ts) !== b.dataset.ts)); renderLog(); }
+    if (confirm(t("Изтрий този запис?"))) { setLog(getLog().filter((e) => String(e.ts) !== b.dataset.ts)); renderLog(); }
   }));
 }
 
@@ -787,15 +787,15 @@ function setupMulti() {
   for (let i = 0; i < MULTI_ROWS; i++) {
     html += `<div class="multi-row">
       <span class="multi-idx">${i + 1}</span>
-      <div><select id="multiRec${i}" data-i="${i}" aria-label="Рецепта на ред ${i + 1}"></select></div>
-      <input type="text" inputmode="decimal" id="multiCnt${i}" placeholder="0" aria-label="Брой пускове на ред ${i + 1}" />
+      <div><select id="multiRec${i}" data-i="${i}" aria-label="${t("Рецепта на ред {0}", i + 1)}"></select></div>
+      <input type="text" inputmode="decimal" id="multiCnt${i}" placeholder="0" aria-label="${t("Брой пускове на ред {0}", i + 1)}" />
     </div>`;
   }
   wrap.innerHTML = html;
 
   for (let i = 0; i < MULTI_ROWS; i++) {
     const sel = $("multiRec" + i);
-    let opts = `<option value="">— избери —</option>`;
+    let opts = `<option value="">${t("— избери —")}</option>`;
     MODEL.recipes.forEach((r) => {
       opts += `<option value="${escapeHtml(r.number)}">№${escapeHtml(r.number)} — ${escapeHtml(r.kind)}${isFavorite(r.number) ? "  ★" : ""}</option>`;
     });
@@ -816,7 +816,7 @@ function setupMulti() {
   if (!_multiBound) {
     _multiBound = true;
     $("multiClearBtn").addEventListener("click", () => {
-      if (!confirm("Изчисти всички редове?")) return;
+      if (!confirm(t("Изчисти всички редове?"))) return;
       for (let i = 0; i < MULTI_ROWS; i++) { $("multiRec" + i).value = ""; $("multiCnt" + i).value = ""; refreshPicker($("multiRec" + i)); }
       onMultiChange();
     });
@@ -853,7 +853,7 @@ function multiTotals(entries) {
   });
   return [...map.values()];
 }
-function cntLabel(n) { return n === 1 ? "пуск" : "пуска"; }
+function cntLabel(n) { return n === 1 ? t("пуск") : t("пуска"); }
 
 function recalcMulti() {
   const entries = multiEntries();
@@ -861,7 +861,7 @@ function recalcMulti() {
   const per = $("multiPerRecipe");
   if (!entries.length) {
     totalCard.style.display = "none";
-    per.innerHTML = `<div class="empty">Избери рецепта и брой поне на един ред.</div>`;
+    per.innerHTML = `<div class="empty">${t("Избери рецепта и брой поне на един ред.")}</div>`;
     return;
   }
 
@@ -871,7 +871,7 @@ function recalcMulti() {
   const tracked = totals.some((t) => stock[matKey(t.name)] != null);
   let grand = 0;
   totals.forEach((t) => { grand += t.kg; });
-  let html = `<tr><th>Материал</th><th class="num">Нужни кг</th><th class="num">${tracked ? "Остават" : "%"}</th></tr>`;
+  let html = `<tr><th>${t("Материал")}</th><th class="num">${t("Нужни кг")}</th><th class="num">${tracked ? t("Остават") : "%"}</th></tr>`;
   const shorts = [];
   totals.forEach((t) => {
     let third;
@@ -880,7 +880,7 @@ function recalcMulti() {
       if (have == null) third = `<td class="num" style="color:var(--text-faint)">—</td>`;
       else {
         const left = have - t.kg;
-        if (left < -1e-9) { shorts.push(`${t.name} (${fmtKg(-left)} кг)`); third = `<td class="num short">−${fmtKg(-left)}</td>`; }
+        if (left < -1e-9) { shorts.push(`${t.name} (${fmtKg(-left)} ${window.t("кг")})`); third = `<td class="num short">−${fmtKg(-left)}</td>`; }
         else third = `<td class="num ok">${fmtKg(left)}</td>`;
       }
     } else {
@@ -889,14 +889,14 @@ function recalcMulti() {
     }
     html += `<tr><td class="name">${escapeHtml(t.name)}</td><td class="num val">${fmtKg(t.kg)}</td>${third}</tr>`;
   });
-  html += `<tr class="total"><td>Общо (кг)</td><td class="num val">${fmtKg(grand)}</td><td class="num"></td></tr>`;
+  html += `<tr class="total"><td>${t("Общо (кг)")}</td><td class="num val">${fmtKg(grand)}</td><td class="num"></td></tr>`;
   $("multiTotalTable").innerHTML = html;
   const sh = $("multiShort");
   sh.style.display = shorts.length ? "block" : "none";
-  sh.textContent = shorts.length ? "Не достигат в склада: " + shorts.join(", ") : "";
+  sh.textContent = shorts.length ? t("Не достигат в склада: ") + shorts.join(", ") : "";
   $("multiDeductBtn").style.display = tracked ? "" : "none";
   const totalCnt = entries.reduce((s, e) => s + e.cnt, 0);
-  $("multiTotalSub").textContent = `${entries.length} ${entries.length === 1 ? "рецепта" : "рецепти"}, общо ${fmt(totalCnt, totalCnt % 1 ? 1 : 0)} ${cntLabel(totalCnt)}`;
+  $("multiTotalSub").textContent = t("{0} {1}, общо {2} {3}", entries.length, entries.length === 1 ? t("рецепта") : t("рецепти"), fmt(totalCnt, totalCnt % 1 ? 1 : 0), cntLabel(totalCnt));
 
   let costAll = 0, anyCost = false;
   entries.forEach(({ rec, cnt }) => {
@@ -909,18 +909,18 @@ function recalcMulti() {
 
   // --- Поотделно за всяка рецепта ---
   per.innerHTML = entries.map(({ rec, cnt, row }) => {
-    let t = `<tr><th>Материал</th><th class="num">1 пуск</th><th class="num">× ${fmt(cnt, cnt % 1 ? 1 : 0)}</th></tr>`;
+    let t = `<tr><th>${window.t("Материал")}</th><th class="num">${window.t("1 пуск")}</th><th class="num">× ${fmt(cnt, cnt % 1 ? 1 : 0)}</th></tr>`;
     let s1 = 0;
     rec.components.forEach((c) => {
       s1 += c.kg;
       t += `<tr><td class="name">${escapeHtml(c.name)}</td><td class="num" style="color:var(--text-dim)">${fmt(c.kg)}</td><td class="num val">${fmtKg(c.kg * cnt)}</td></tr>`;
     });
-    t += `<tr class="total"><td>Общо (кг)</td><td class="num">${fmt(s1)}</td><td class="num val">${fmtKg(s1 * cnt)}</td></tr>`;
+    t += `<tr class="total"><td>${window.t("Общо (кг)")}</td><td class="num">${fmt(s1)}</td><td class="num val">${fmtKg(s1 * cnt)}</td></tr>`;
     const cost = costOf(rec.components, cnt);
     return `<details class="card multi-rec">
       <summary>
         <span class="multi-rec-title"><span class="multi-idx">${row}</span>№${escapeHtml(rec.number)} — ${escapeHtml(rec.kind)}</span>
-        <span class="multi-rec-sum">${fmt(cnt, cnt % 1 ? 1 : 0)} ${cntLabel(cnt)}, ${fmtKg(s1 * cnt)} кг${cost != null ? ", " + fmt(cost, 2) + " €" : ""}</span>
+        <span class="multi-rec-sum">${fmt(cnt, cnt % 1 ? 1 : 0)} ${cntLabel(cnt)}, ${fmtKg(s1 * cnt)} ${window.t("кг")}${cost != null ? ", " + fmt(cost, 2) + " €" : ""}</span>
       </summary>
       <table class="mat-table" style="margin-top:8px;">${t}</table>
     </details>`;
@@ -933,18 +933,18 @@ function multiShareText() {
   const lines = [];
   entries.forEach(({ rec, cnt }) => {
     const s1 = rec.components.reduce((s, c) => s + c.kg, 0);
-    lines.push(`№${rec.number} — ${rec.kind} × ${fmt(cnt, cnt % 1 ? 1 : 0)} (${fmtKg(s1 * cnt)} кг)`);
-    rec.components.forEach((c) => lines.push(`   ${c.name}: ${fmtKg(c.kg * cnt)} кг`));
+    lines.push(`№${rec.number} — ${rec.kind} × ${fmt(cnt, cnt % 1 ? 1 : 0)} (${fmtKg(s1 * cnt)} ${t("кг")})`);
+    rec.components.forEach((c) => lines.push(`   ${c.name}: ${fmtKg(c.kg * cnt)} ${t("кг")}`));
     lines.push("");
   });
-  lines.push("ОБЩО ЗА ВСИЧКИ:");
+  lines.push(t("ОБЩО ЗА ВСИЧКИ:"));
   let grand = 0;
-  multiTotals(entries).forEach((t) => { grand += t.kg; lines.push(`${t.name}: ${fmtKg(t.kg)} кг`); });
-  lines.push(`Общо: ${fmtKg(grand)} кг`);
+  multiTotals(entries).forEach((m) => { grand += m.kg; lines.push(`${m.name}: ${fmtKg(m.kg)} ${t("кг")}`); });
+  lines.push(t("Общо: {0} кг", fmtKg(grand)));
   let costAll = 0, any = false;
   entries.forEach(({ rec, cnt }) => { const c = costOf(rec.components, cnt); if (c != null) { costAll += c; any = true; } });
-  if (any) lines.push(`Себестойност: ${fmt(costAll, 2)} €`);
-  return ["Сборен калкулатор — материали", lines.join("\n")];
+  if (any) lines.push(t("Себестойност: {0} €", fmt(costAll, 2)));
+  return [t("Сборен калкулатор — материали"), lines.join("\n")];
 }
 
 // ====== ТАБ: Склад / наличности (запазени локално, в кг) ======
@@ -976,15 +976,15 @@ function setupStock() {
     <div class="stock-row" data-i="${i}">
       <div class="stock-main">
         <label class="stock-name" for="stockIn${i}">${escapeHtml(m.name)}</label>
-        <input type="text" inputmode="decimal" id="stockIn${i}" placeholder="кг" value="${stock[m.key] != null ? numToField(stock[m.key]) : ""}" />
-        <button type="button" class="stock-add-btn" data-add="${i}" title="Добави доставка" aria-label="Добави доставка за ${escapeHtml(m.name)}">+</button>
+        <input type="text" inputmode="decimal" id="stockIn${i}" placeholder="${t("кг")}" value="${stock[m.key] != null ? numToField(stock[m.key]) : ""}" />
+        <button type="button" class="stock-add-btn" data-add="${i}" title="${t("Добави доставка")}" aria-label="${t("Добави доставка за {0}", escapeHtml(m.name))}">+</button>
       </div>
       <div class="stock-add" id="stockAdd${i}" hidden>
-        <input type="text" inputmode="decimal" id="stockAddIn${i}" placeholder="Доставка, кг" />
-        <button type="button" class="btn" data-addok="${i}">Добави</button>
+        <input type="text" inputmode="decimal" id="stockAddIn${i}" placeholder="${t("Доставка, кг")}" />
+        <button type="button" class="btn" data-addok="${i}">${t("Добави")}</button>
       </div>
       <div class="stock-note" id="stockNote${i}"></div>
-    </div>`).join("") || `<div class="empty">Няма суровини в рецептите.</div>`;
+    </div>`).join("") || `<div class="empty">${t("Няма суровини в рецептите.")}</div>`;
 
   const list = $("stockList");
   if (!list._bound) {
@@ -1015,7 +1015,7 @@ function setupStock() {
       const m = /^stockAddIn(\d+)$/.exec(e.target.id || "");
       if (m && e.key === "Enter") addDelivery(+m[1]);
     });
-    $("stockShareBtn").addEventListener("click", () => { const [t, b] = stockShareText(); if (t) shareText(t, b); else toast("Нищо не достига за плана."); });
+    $("stockShareBtn").addEventListener("click", () => { const [t, b] = stockShareText(); if (t) shareText(t, b); else toast(t("Нищо не достига за плана.")); });
   }
   recalcStock();
 }
@@ -1032,7 +1032,7 @@ function addDelivery(i) {
   inp.value = "";
   $("stockAdd" + i).hidden = true;
   recalcStock();
-  toast(`Добавени ${fmtKg(v)} кг ${_stockMats[i].name}.`);
+  toast(t("Добавени {0} кг {1}.", fmtKg(v), _stockMats[i].name));
 }
 // Нужни количества по плана от „Сборен“: { ключ: кг }
 function planNeeds() {
@@ -1059,51 +1059,51 @@ function recalcStock() {
     const n = need[m.key], have = st[m.key];
     note.className = "stock-note";
     if (n == null) { note.textContent = ""; return; }
-    if (have == null) { untracked++; note.textContent = `За плана трябват ${fmtKg(n)} кг`; return; }
+    if (have == null) { untracked++; note.textContent = t("За плана трябват {0} кг", fmtKg(n)); return; }
     const left = have - n;
-    if (left < -1e-9) { note.classList.add("short"); note.textContent = `За плана трябват ${fmtKg(n)} кг, не достигат ${fmtKg(-left)} кг`; }
-    else { note.classList.add("ok"); note.textContent = `За плана трябват ${fmtKg(n)} кг, остават ${fmtKg(left)} кг`; }
+    if (left < -1e-9) { note.classList.add("short"); note.textContent = t("За плана трябват {0} кг, не достигат {1} кг", fmtKg(n), fmtKg(-left)); }
+    else { note.classList.add("ok"); note.textContent = t("За плана трябват {0} кг, остават {1} кг", fmtKg(n), fmtKg(left)); }
   });
 
   const box = $("stockSummary");
   const shorts = stockShortages();
   if (!hasPlan) {
-    box.innerHTML = `<h3 class="card-title">Няма план за сравнение</h3><div class="card-sub" style="margin:0;">Попълни рецепти и брой в „Сборен“ и тук ще видиш какво не достига.</div>`;
+    box.innerHTML = `<h3 class="card-title">${t("Няма план за сравнение")}</h3><div class="card-sub" style="margin:0;">${t("Попълни рецепти и брой в „Сборен“ и тук ще видиш какво не достига.")}</div>`;
   } else if (shorts.length) {
-    let t = `<tr><th>Суровина</th><th class="num">Има</th><th class="num">Трябват</th><th class="num">Не достигат</th></tr>`;
-    shorts.forEach((x) => { t += `<tr><td class="name">${escapeHtml(x.name)}</td><td class="num">${fmtKg(x.have)}</td><td class="num">${fmtKg(x.need)}</td><td class="num short">${fmtKg(x.short)}</td></tr>`; });
-    box.innerHTML = `<h3 class="card-title">${shorts.length === 1 ? "Не достига 1 суровина" : "Не достигат " + shorts.length + " суровини"} за плана</h3><div class="card-sub">Количества в кг, спрямо плана от „Сборен“.</div><table class="mat-table">${t}</table>`;
+    let tb = `<tr><th>${t("Суровина")}</th><th class="num">${t("Има")}</th><th class="num">${t("Трябват")}</th><th class="num">${t("Не достигат")}</th></tr>`;
+    shorts.forEach((x) => { tb += `<tr><td class="name">${escapeHtml(x.name)}</td><td class="num">${fmtKg(x.have)}</td><td class="num">${fmtKg(x.need)}</td><td class="num short">${fmtKg(x.short)}</td></tr>`; });
+    box.innerHTML = `<h3 class="card-title">${shorts.length === 1 ? t("Не достига 1 суровина за плана") : t("Не достигат {0} суровини за плана", shorts.length)}</h3><div class="card-sub">${t("Количества в кг, спрямо плана от „Сборен“.")}</div><table class="mat-table">${tb}</table>`;
   } else {
-    box.innerHTML = `<h3 class="card-title">Наличностите стигат за плана</h3><p class="ok-line">Всички следени суровини покриват плана от „Сборен“.</p>`;
+    box.innerHTML = `<h3 class="card-title">${t("Наличностите стигат за плана")}</h3><p class="ok-line">${t("Всички следени суровини покриват плана от „Сборен“.")}</p>`;
   }
-  if (hasPlan && untracked) box.innerHTML += `<p class="hint">${untracked} ${untracked === 1 ? "суровина от плана няма" : "суровини от плана нямат"} въведена наличност и не се ${untracked === 1 ? "проверява" : "проверяват"}.</p>`;
+  if (hasPlan && untracked) box.innerHTML += `<p class="hint">${untracked === 1 ? t("1 суровина от плана няма въведена наличност и не се проверява.") : t("{0} суровини от плана нямат въведена наличност и не се проверяват.", untracked)}</p>`;
 }
 function stockShareText() {
   const shorts = stockShortages();
   if (!shorts.length) return ["", ""];
-  const lines = shorts.map((x) => `${x.name}: ${fmtKg(x.short)} кг (има ${fmtKg(x.have)}, трябват ${fmtKg(x.need)})`);
-  return ["Списък за поръчка — не достигат за плана", lines.join("\n")];
+  const lines = shorts.map((x) => t("{0}: {1} кг (има {2}, трябват {3})", x.name, fmtKg(x.short), fmtKg(x.have), fmtKg(x.need)));
+  return [t("Списък за поръчка — не достигат за плана"), lines.join("\n")];
 }
 // Изважда плана от „Сборен“ от наличностите (само за следените суровини)
 function deductPlanFromStock() {
   const need = planNeeds(), st = getStock();
   const keys = Object.keys(need).filter((k) => st[k] != null);
-  if (!keys.length) { toast("Няма следени суровини в този план."); return; }
-  if (!confirm(`Приспадни плана от склада?\nЩе се намалят наличностите на ${keys.length} ${keys.length === 1 ? "суровина" : "суровини"}.`)) return;
+  if (!keys.length) { toast(t("Няма следени суровини в този план.")); return; }
+  if (!confirm(keys.length === 1 ? t("Приспадни плана от склада?\nЩе се намали наличността на 1 суровина.") : t("Приспадни плана от склада?\nЩе се намалят наличностите на {0} суровини.", keys.length))) return;
   // Наличността не пада под нула
   keys.forEach((k) => { st[k] = Math.max(0, Math.round((st[k] - need[k]) * 1000) / 1000); });
   setStock(st);
   _stockMats.forEach((m, i) => { const inp = $("stockIn" + i); if (inp && st[m.key] != null) inp.value = numToField(st[m.key]); });
   recalcMulti();
   recalcStock();
-  toast("Планът е приспаднат от склада.");
+  toast(t("Планът е приспаднат от склада."));
 }
 
 // ====== Печат / PDF на текущия таб ======
 let _printOpened = [];
 function printTab() {
-  const d = new Date().toLocaleString("bg-BG", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-  $("printHead").innerHTML = `<b>${escapeHtml(currentTabTitle())}</b><span>ПУ Пяна, ${d}</span>`;
+  const d = new Date().toLocaleString(LOC(), { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  $("printHead").innerHTML = `<b>${escapeHtml(currentTabTitle())}</b><span>${t("ПУ Пяна")}, ${d}</span>`;
   window.print();
 }
 function setupPrint() {
@@ -1119,7 +1119,7 @@ function setupPrint() {
 // ====== Помощ / Безопасност (бележки от листа Notes) ======
 function renderHelp() {
   const list = $("helpList");
-  if (!MODEL.notes || !MODEL.notes.length) { list.innerHTML = `<div class="empty">Няма бележки.</div>`; return; }
+  if (!MODEL.notes || !MODEL.notes.length) { list.innerHTML = `<div class="empty">${t("Няма бележки.")}</div>`; return; }
   const dangerRe = /опасн|експлоз|внимани|!!!/i;
   list.innerHTML = MODEL.notes.map((n) => {
     const danger = dangerRe.test(n);
@@ -1139,7 +1139,42 @@ function renderAll() {
   renderLog();
 }
 
+function renderVersion() {
+  const v = t("Версия {0}", APP_VERSION);
+  $("navVersion").textContent = v;
+  $("moreVersion").textContent = v;
+}
+// Пререндиране на динамичното съдържание при смяна на езика (без загуба на въведеното)
+function onLangChange() {
+  renderVersion();
+  setSyncStatus(_sync[0], _sync[1]);
+  if (!MODEL) return;
+  document.querySelectorAll("select").forEach((sel) => {
+    const empty = sel.querySelector('option[value=""]');
+    if (empty && sel.id.startsWith("multiRec")) empty.textContent = t("— избери —");
+    if (sel._pickBtn) refreshPicker(sel);
+  });
+  for (let i = 0; i < MULTI_ROWS; i++) {
+    const s = $("multiRec" + i), c = $("multiCnt" + i);
+    if (s) s.setAttribute("aria-label", t("Рецепта на ред {0}", i + 1));
+    if (c) c.setAttribute("aria-label", t("Брой пускове на ред {0}", i + 1));
+  }
+  if ($("pickModal").classList.contains("open")) renderPickList();
+  recalcCalc();
+  recalcCal();
+  renderRecipeList();
+  $("amineCoeffShow").textContent = fmt(MODEL.amineCoeff, 4) + " " + t("гр/пулс");
+  recalcAmine();
+  recalcSim();
+  recalcMulti();
+  setupStock();
+  renderLog();
+  if ($("helpModal").classList.contains("open")) renderHelp();
+}
+
 async function init() {
+  $("langBtn").addEventListener("click", () => setLang(LANG === "en" ? "bg" : "en"));
+  setLang(LANG);
   setupNav();
   setupPicker();
   setupPrint();
@@ -1154,7 +1189,7 @@ async function init() {
     if (!res.model || !res.model.recipes.length) {
       if (res.error && !res.model) {
         setSyncStatus("error");
-        $("loadingText").textContent = "Няма връзка и няма кеширани данни.";
+        $("loadingText").textContent = t("Няма връзка и няма кеширани данни.");
         return;
       }
     }
